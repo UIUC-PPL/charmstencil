@@ -33,6 +33,12 @@ class FieldOperationNode(object):
                     self.identifier += op.graph.identifier
                 elif isinstance(op, slice):
                     self.identifier += self._slice_to_bytes(op)
+                elif isinstance(op, tuple):
+                    for k in op:
+                        if isinstance(k, slice):
+                            self.identifier += self._slice_to_bytes(k)
+                        elif isinstance(k, int):
+                            self.identifier += to_bytes(k, 'i')
                 elif isinstance(op, int):
                     self.identifier += to_bytes(op, 'i')
                 elif isinstance(op, float):
@@ -68,7 +74,7 @@ class FieldOperationNode(object):
             if isinstance(op, Field):
                 next_id = op.graph.fill_plot(G, node_map, next_id, opnode)
             elif isinstance(op, float) or isinstance(op, int) or \
-                isinstance(op, slice):
+                isinstance(op, slice) or isinstance(op, tuple):
                 G.add_node(next_id)
                 G.add_edge(opnode, next_id)
                 node_map[next_id] = str(op)
