@@ -130,11 +130,13 @@ class BoundaryGraph(ComputeGraph):
 
 
 class StencilGraph(object):
-    def __init__(self):
+    def __init__(self, stencil, max_epochs):
         self.unique_graphs = []
         self.graphs, self.epochs = [], []
         self.iterate_identifier_map = {}
         self.boundary_identifier_map = {}
+        self.max_epochs = max_epochs
+        self.stencil = stencil
         self.epoch = 0
 
     def _insert_graph(self, graph, id_map):
@@ -167,6 +169,11 @@ class StencilGraph(object):
             self._insert_node(obj)
         else:
             raise ValueError("incorrect type of obj")
+        if len(self.graphs) >= self.max_epochs:
+            self.evaluate()
+
+    def evaluate(self):
+        self.stencil.evaluate()
 
     def plot(self):
         G = nx.Graph()
@@ -180,7 +187,7 @@ class StencilGraph(object):
         pos = graphviz_layout(G, prog='dot')
         nx.draw(G, pos, labels=node_map, node_size=600, font_size=10)
         print('Epoch\tGraph')
-        for i, n in enumerate(self.graphs):
+        for i, n in zip(self.epochs, self.graphs):
             print('%i\t%s' % (i, 'g%i' % n if isinstance(n, int) else n))
         plt.show()
 

@@ -40,7 +40,7 @@ class DebugInterface(Interface):
         pass
 
     def evaluate_stencil(self, stencil):
-        stencil.active_graph.plot()
+        stencil.stencil_graph.plot()
 
 
 class CCSInterface(Interface):

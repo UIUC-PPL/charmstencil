@@ -78,7 +78,7 @@ class Stencil(object):
     def __init__(self, *args, **kwargs):
         """Stencil base class
         """
-        self.initialize()
+        self.initialize(**kwargs)
 
     def __del__(self):
         if self._allocated:
@@ -87,20 +87,20 @@ class Stencil(object):
     def _call_iterate(self, *args, **kwargs):
         self.active_graph, prev_graph = self._iterate_graph, self.active_graph
         ret = self.iterate(*args, **kwargs)
-        if not self.active_graph.is_empty():
-            self._stencil_graph.insert(self.active_graph)
         self._iterate_graph = IterateGraph()
+        if not self.active_graph.is_empty():
+            self.stencil_graph.insert(self.active_graph)
         self.active_graph = prev_graph
         return ret
 
     def _call_boundary(self, *args, **kwargs):
         prev_graph = self.active_graph
-        if self.active_graph == self._stencil_graph:
+        if self.active_graph == self.stencil_graph:
             self.active_graph = self._boundary_graph
             ret = self.boundary(*args, **kwargs)
-            if not self.active_graph.is_empty():
-                self._stencil_graph.insert(self.active_graph)
             self._boundary_graph = BoundaryGraph()
+            if not self.active_graph.is_empty():
+                self.stencil_graph.insert(self.active_graph)
         elif self.active_graph == self._iterate_graph:
             ret = self.boundary(*args, **kwargs)
         else:
@@ -110,14 +110,15 @@ class Stencil(object):
 
     def initialize(self, **kwargs):
         self.interface = kwargs.pop('interface', DummyInterface())
+        max_epochs = kwargs.pop('max_epochs', 10)
         self.name = get_stencil_name()
         self._next_field_id = 0
-        self._stencil_graph = StencilGraph()
+        self.stencil_graph = StencilGraph(self, max_epochs)
         self._boundary_graph = BoundaryGraph()
         self._iterate_graph = IterateGraph()
         self._fields = []
         self._allocated = False
-        self.active_graph = self._stencil_graph
+        self.active_graph = self.stencil_graph
 
     def get_field_name(self):
         field_name = self._next_field_id
@@ -126,12 +127,12 @@ class Stencil(object):
 
     @final
     def create_field(self, shape, **kwargs):
-        if self.active_graph != self._stencil_graph:
+        if self.active_graph != self.stencil_graph:
             raise RuntimeError("fields cannot be created in iterate or "
                                "boundary functions")
         name = self.get_field_name()
         f = Field(name, shape, self, **kwargs)
-        self._stencil_graph.insert(CreateFieldNode(shape, **kwargs))
+        self.stencil_graph.insert(CreateFieldNode(shape, **kwargs))
         self._fields.append(f)
         return f
 
@@ -161,20 +162,20 @@ class Stencil(object):
     def evaluate(self):
         if self.active_graph == self._iterate_graph and \
                 not self.active_graph.is_empty():
-            self._stencil_graph.insert(self.active_graph)
+            self.stencil_graph.insert(self.active_graph)
             self._iterate_graph = IterateGraph()
             self.active_graph = self._iterate_graph
         elif self.active_graph == self._boundary_graph and \
                 not self.active_graph.is_empty():
-            self._stencil_graph.insert(self.active_graph)
+            self.stencil_graph.insert(self.active_graph)
             self._boundary_graph = BoundaryGraph()
             self.active_graph = self._boundary_graph
-        if not self._stencil_graph.is_empty():
+        if not self.stencil_graph.is_empty():
             self.interface.evaluate_stencil(self)
             self.flush()
 
     def flush(self):
         for f in self._fields:
             f.graph = FieldOperationNode('noop', [f])
-        self._stencil_graph.flush()
+        self.stencil_graph.flush()
 

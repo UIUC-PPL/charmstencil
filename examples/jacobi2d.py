@@ -17,7 +17,7 @@ class Grid(Stencil):
         self.x, self.y = self.y, self.x
         self.itercount += 1
         #if self.itercount % nsteps == 0:
-        if self.itercount == 10:
+        if self.itercount == nsteps:
             #return norm(self.x - self.y, np.inf).get() > self.threshold
             return False
         else:
