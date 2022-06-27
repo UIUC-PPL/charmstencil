@@ -70,8 +70,14 @@ class Field(object):
         return self * (1 / other)
 
     def get(self):
+        if not self.stencil.active_graph.is_empty():
+            self.stencil.active_graph.insert(self.graph)
         self.stencil.evaluate()
+        self.graph.save = True
         self.stencil.interface.get(self.stencil.name, self.name)
+
+    def flush(self):
+        self.graph = FieldOperationNode('noop', [self])
 
 
 class Stencil(object):
@@ -162,6 +168,7 @@ class Stencil(object):
     def evaluate(self):
         if self.active_graph == self._iterate_graph and \
                 not self.active_graph.is_empty():
+            self.active_graph.plot()
             self.stencil_graph.insert(self.active_graph)
             self._iterate_graph = IterateGraph()
             self.active_graph = self._iterate_graph
@@ -176,6 +183,6 @@ class Stencil(object):
 
     def flush(self):
         for f in self._fields:
-            f.graph = FieldOperationNode('noop', [f])
+            f.flush()
         self.stencil_graph.flush()
 

@@ -1,10 +1,11 @@
 import numpy as np
 from charmstencil.stencil import Stencil
+from charmstencil.linalg import norm
 from charmstencil.interface import DebugInterface
 
 class Grid(Stencil):
     def __init__(self, n, interface):
-        self.initialize(interface=interface)
+        self.initialize(interface=interface, max_epochs=100)
         self.x = self.create_field(n, ghost_depth=1)
         self.y = self.create_field(n, ghost_depth=1)
         self.apply_boundary(100.)
@@ -15,10 +16,8 @@ class Grid(Stencil):
         self.y[1:-1] = 0.5 * (self.x[:-2] + self.x[2:])
         self.x, self.y = self.y, self.x
         self.itercount += 1
-        #if self.itercount % nsteps == 0:
-        if self.itercount == 10:
-            #return norm(self.x - self.y, np.inf).get() > self.threshold
-            return False
+        if self.itercount % nsteps == 0:
+            return norm(self.x - self.y, np.inf).get() > self.threshold
         else:
             return True
 

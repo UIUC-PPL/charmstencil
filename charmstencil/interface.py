@@ -20,6 +20,9 @@ class Interface(object):
     def evaluate_stencil(self, stencil):
         raise NotImplementedError('evaluate_stencil called from base class')
 
+    def get(self, stencil_name, field_name):
+        raise NotImplementedError('get called from base class')
+
 
 class DummyInterface(Interface):
     def __init__(self):
@@ -31,6 +34,9 @@ class DummyInterface(Interface):
     def evaluate_stencil(self, stencil):
         pass
 
+    def get(self, stencil_name, field_name):
+        return None
+
 
 class DebugInterface(Interface):
     def __init__(self):
@@ -41,6 +47,9 @@ class DebugInterface(Interface):
 
     def evaluate_stencil(self, stencil):
         stencil.stencil_graph.plot()
+
+    def get(self, stencil_name, field_name):
+        return None
 
 
 class CCSInterface(Interface):
@@ -73,4 +82,6 @@ class CCSInterface(Interface):
     def send_command_async(self, handler, msg):
         self.server.send_request(handler, 0, msg)
 
+    def get(self, stencil_name, field_name):
+        pass
 

@@ -6,8 +6,8 @@ from ctypes import c_long
 from charmstencil.interface import to_bytes
 
 
-OPCODES = {'noop': 0, 'create': 1, '+': 2, '-': 3, '*': 4,
-           'getitem': 5, 'setitem': 6, 'exchange_ghosts': 7}
+OPCODES = {'noop': 0, 'create': 1, '+': 2, '-': 3, '*': 4, 'norm': 5,
+           'getitem': 6, 'setitem': 7, 'exchange_ghosts': 8}
 
 
 INV_OPCODES = {v: k for k, v in OPCODES.items()}
@@ -20,10 +20,11 @@ class CreateFieldNode(object):
 
 
 class FieldOperationNode(object):
-    def __init__(self, operation, operands):
+    def __init__(self, operation, operands, save=False):
         from charmstencil.stencil import Field
         self.opcode = OPCODES.get(operation)
         self.operands = operands
+        self.save = save
         self.identifier = to_bytes(self.opcode, 'B')
         if self.opcode == 0:
             self.identifier += to_bytes(operands[0].name, 'B')
