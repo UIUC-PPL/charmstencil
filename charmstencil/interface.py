@@ -10,6 +10,15 @@ def from_bytes(bvalue, dtype='I'):
     return struct.unpack(dtype, bvalue)[0]
 
 
+class Handlers(object):
+    connection_handler = b'aum_connect'
+    disconnection_handler = b'aum_disconnect'
+    operation_handler = b'aum_operation'
+    fetch_handler = b'aum_fetch'
+    delete_handler = b'aum_delete'
+    exit_handler = b'aum_exit'
+
+
 class Interface(object):
     def __init__(self):
         pass
@@ -17,7 +26,7 @@ class Interface(object):
     def delete_stencil(self, name):
         raise NotImplementedError('delete_stencil called from base class')
 
-    def evaluate_stencil(self, stencil):
+    def evaluate_stencil(self, stencil_graph):
         raise NotImplementedError('evaluate_stencil called from base class')
 
     def get(self, stencil_name, field_name):
@@ -31,7 +40,7 @@ class DummyInterface(Interface):
     def delete_stencil(self, name):
         pass
 
-    def evaluate_stencil(self, stencil):
+    def evaluate_stencil(self, stencil_graph):
         pass
 
     def get(self, stencil_name, field_name):
@@ -45,8 +54,8 @@ class DebugInterface(Interface):
     def delete_stencil(self, name):
         pass
 
-    def evaluate_stencil(self, stencil):
-        stencil.stencil_graph.plot()
+    def evaluate_stencil(self, stencil_graph):
+        stencil_graph.plot()
 
     def get(self, stencil_name, field_name):
         return None
@@ -69,8 +78,27 @@ class CCSInterface(Interface):
         cmd = to_bytes(name, 'B')
         self.send_command_async(Handlers.delete_handler, cmd)
 
-    def evaluate_stencil(self, stencil):
-        pass
+    def evaluate_stencil(self, stencil_graph):
+        '''
+        1. epoch
+        2. number of new unique graphs
+        for each new graph
+            1. size of graph
+            2. graph
+        3. array of graph index
+        '''
+        cmd = to_bytes(stencil_graph.stencil.name, 'B')
+        cmd += to_bytes(stencil_graph.epoch, 'I')
+        cmd += to_bytes(len(stencil_graph.unique_graphs) - \
+                        stencil_graph.next_graph, 'B')
+        for g in stencil_graph.unique_graphs[stencil_graph.next_graph:]:
+            cmd += to_bytes(len(g.identifier), 'I')
+            cmd += g.identifier
+        cmd += to_bytes(len(stencil_graph.graphs), 'I')
+        for graph in stencil_graph.graphs:
+            cmd += to_bytes(graph, 'B')
+        stencil_graph.next_graph = len(stencil_graph.unique_graphs)
+        send_command_async(Handlers.operation_handler, cmd)
 
     def send_command_raw(self, handler, msg, reply_size):
         self.server.send_request(handler, 0, msg)

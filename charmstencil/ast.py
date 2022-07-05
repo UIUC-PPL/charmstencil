@@ -13,10 +13,22 @@ OPCODES = {'noop': 0, 'create': 1, '+': 2, '-': 3, '*': 4, 'norm': 5,
 INV_OPCODES = {v: k for k, v in OPCODES.items()}
 
 
+OPERAND_TYPES = {'field': 0, 'slice': 1, 'tuple': 2, 'int': 3, 'float': 4}
+
+
 class CreateFieldNode(object):
-    def __init__(self, shape, **kwargs):
+    def __init__(self, name, shape, **kwargs):
+        self.name = name
         self.shape = shape
+        self.identifier = to_bytes(OPCODES.get('create'), 'B') + \
+            to_bytes(self.name, 'B')
         # FIXME get ghost info from kwargs
+
+    def fill_plot(self, G, node_map={}, next_id=0, parent=None):
+        G.add_node(next_id)
+        G.add_edge(parent, next_id)
+        node_map[next_id] = 'CreateField: f' + str(self.name)
+        return next_id + 1
 
 
 class FieldOperationNode(object):
@@ -25,24 +37,44 @@ class FieldOperationNode(object):
         self.opcode = OPCODES.get(operation)
         self.operands = operands
         self.save = save
-        self.identifier = to_bytes(self.opcode, 'B')
+        self.identifier = to_bytes(OPERAND_TYPES.get('field'), 'B')
+        self.identifier += to_bytes(self.opcode, 'B')
         if self.opcode == 0:
             self.identifier += to_bytes(operands[0].name, 'B')
         else:
+            self.identifier += to_bytes(len(operands), 'B')
             for op in operands:
                 if isinstance(op, Field):
+                    self.identifier += to_bytes(
+                        OPERAND_TYPES.get('field'), 'B'
+                    )
                     self.identifier += op.graph.identifier
                 elif isinstance(op, slice):
+                    self.identifier += to_bytes(OPERAND_TYPES.get('slice'), 'B')
                     self.identifier += self._slice_to_bytes(op)
                 elif isinstance(op, tuple):
+                    if isinstance(op[0], slice):
+                        self.identifier += to_bytes(
+                            OPERAND_TYPES.get('slice'), 'B'
+                        )
+                    elif isinstance(op[0], int):
+                        self.identifier += to_bytes(
+                            OPERAND_TYPES.get('int'), 'B'
+                        )
                     for k in op:
                         if isinstance(k, slice):
                             self.identifier += self._slice_to_bytes(k)
                         elif isinstance(k, int):
                             self.identifier += to_bytes(k, 'i')
                 elif isinstance(op, int):
+                    self.identifier += to_bytes(
+                        OPERAND_TYPES.get('int'), 'B'
+                    )
                     self.identifier += to_bytes(op, 'i')
                 elif isinstance(op, float):
+                    self.identifier += to_bytes(
+                        OPERAND_TYPES.get('float'), 'B'
+                    )
                     self.identifier += to_bytes(op, 'd')
                 else:
                     raise ValueError('unrecognized operation')
@@ -133,11 +165,12 @@ class BoundaryGraph(ComputeGraph):
 class StencilGraph(object):
     def __init__(self, stencil, max_epochs):
         self.unique_graphs = []
-        self.graphs, self.epochs = [], []
+        self.graphs = []
         self.iterate_identifier_map = {}
         self.boundary_identifier_map = {}
         self.max_epochs = max_epochs
         self.stencil = stencil
+        self.next_graph = 0
         self.epoch = 0
 
     def _insert_graph(self, graph, id_map):
@@ -146,20 +179,17 @@ class StencilGraph(object):
             id_map[identifier] = len(self.unique_graphs)
             self.unique_graphs.append(graph)
         self.graphs.append(id_map[identifier])
-        self.epochs.append(self.epoch)
-        self.epoch += 1
 
     def _insert_node(self, node):
-        self.graphs.append(node)
-        self.epochs.append(self.epoch)
-        self.epoch += 1
+        self.graphs.append(len(self.unique_graphs))
+        self.unique_graphs.append(node)
 
     def is_empty(self):
         return len(self.graphs) == 0
 
     def flush(self):
         self.graphs = []
-        self.epochs = []
+        self.epoch += 1
 
     def insert(self, obj):
         if isinstance(obj, IterateGraph):
@@ -188,7 +218,7 @@ class StencilGraph(object):
         pos = graphviz_layout(G, prog='dot')
         nx.draw(G, pos, labels=node_map, node_size=600, font_size=10)
         print('Epoch\tGraph')
-        for i, n in zip(self.epochs, self.graphs):
+        for i, n in enumerate(self.graphs):
             print('%i\t%s' % (i, 'g%i' % n if isinstance(n, int) else n))
         plt.show()
 

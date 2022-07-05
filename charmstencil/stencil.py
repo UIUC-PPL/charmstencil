@@ -138,7 +138,7 @@ class Stencil(object):
                                "boundary functions")
         name = self.get_field_name()
         f = Field(name, shape, self, **kwargs)
-        self.stencil_graph.insert(CreateFieldNode(shape, **kwargs))
+        self.stencil_graph.insert(CreateFieldNode(name, shape, **kwargs))
         self._fields.append(f)
         return f
 
@@ -168,7 +168,6 @@ class Stencil(object):
     def evaluate(self):
         if self.active_graph == self._iterate_graph and \
                 not self.active_graph.is_empty():
-            self.active_graph.plot()
             self.stencil_graph.insert(self.active_graph)
             self._iterate_graph = IterateGraph()
             self.active_graph = self._iterate_graph
@@ -178,7 +177,7 @@ class Stencil(object):
             self._boundary_graph = BoundaryGraph()
             self.active_graph = self._boundary_graph
         if not self.stencil_graph.is_empty():
-            self.interface.evaluate_stencil(self)
+            self.interface.evaluate_stencil(self.stencil_graph)
             self.flush()
 
     def flush(self):
