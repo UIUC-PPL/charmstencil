@@ -13,7 +13,7 @@ OPCODES = {'noop': 0, 'create': 1, '+': 2, '-': 3, '*': 4, 'norm': 5,
 INV_OPCODES = {v: k for k, v in OPCODES.items()}
 
 
-OPERAND_TYPES = {'field': 0, 'slice': 1, 'tuple': 2, 'int': 3, 'float': 4}
+OPERAND_TYPES = {'field': 0, 'slice': 1, 'tuple': 2, 'int': 3, 'double': 4}
 
 
 class CreateFieldNode(object):
@@ -73,7 +73,7 @@ class FieldOperationNode(object):
                     self.identifier += to_bytes(op, 'i')
                 elif isinstance(op, float):
                     self.identifier += to_bytes(
-                        OPERAND_TYPES.get('float'), 'B'
+                        OPERAND_TYPES.get('double'), 'B'
                     )
                     self.identifier += to_bytes(op, 'd')
                 else:

@@ -1,0 +1,20 @@
+mainmodule stencil
+{
+    array [3D] Stencil
+    {
+        entry void Stencil();
+
+        entry void Stencil(CkMigrateMessage* m);
+
+        entry void start(char* cmd)
+        {
+            while (EPOCH > -1)
+            {
+                when receive_graph[EPOCH] (int epoch, int size, char cmd[size])
+                    serial "execute graph" {
+                        execute_graph(epoch, size, cmd);
+                    }
+            }
+        };
+    }
+}

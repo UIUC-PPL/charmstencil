@@ -89,14 +89,16 @@ class CCSInterface(Interface):
         '''
         cmd = to_bytes(stencil_graph.stencil.name, 'B')
         cmd += to_bytes(stencil_graph.epoch, 'I')
-        cmd += to_bytes(len(stencil_graph.unique_graphs) - \
+        gcmd = to_bytes(len(stencil_graph.unique_graphs) - \
                         stencil_graph.next_graph, 'B')
         for g in stencil_graph.unique_graphs[stencil_graph.next_graph:]:
-            cmd += to_bytes(len(g.identifier), 'I')
-            cmd += g.identifier
-        cmd += to_bytes(len(stencil_graph.graphs), 'I')
+            gcmd += to_bytes(len(g.identifier), 'I')
+            gcmd += g.identifier
+        gcmd += to_bytes(len(stencil_graph.graphs), 'I')
         for graph in stencil_graph.graphs:
-            cmd += to_bytes(graph, 'B')
+            gcmd += to_bytes(graph, 'B')
+        cmd += to_bytes(len(gcmd), 'I')
+        cmd += gcmd
         stencil_graph.next_graph = len(stencil_graph.unique_graphs)
         send_command_async(Handlers.operation_handler, cmd)
 
