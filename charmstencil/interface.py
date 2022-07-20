@@ -100,7 +100,7 @@ class CCSInterface(Interface):
         cmd += to_bytes(len(gcmd), 'I')
         cmd += gcmd
         stencil_graph.next_graph = len(stencil_graph.unique_graphs)
-        send_command_async(Handlers.operation_handler, cmd)
+        self.send_command_async(Handlers.operation_handler, cmd)
 
     def send_command_raw(self, handler, msg, reply_size):
         self.server.send_request(handler, 0, msg)

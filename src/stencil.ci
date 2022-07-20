@@ -2,7 +2,7 @@ mainmodule stencil
 {
     array [3D] Stencil
     {
-        entry void Stencil();
+        entry Stencil(uint8_t name_,int ndims,int dims[ndims]);
 
         entry void Stencil(CkMigrateMessage* m);
 
@@ -16,5 +16,8 @@ mainmodule stencil
                     }
             }
         };
+
+        entry void receiveGhost(int dir,int index,int size,int res[size]);
+
     }
 }

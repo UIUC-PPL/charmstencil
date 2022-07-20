@@ -44,7 +44,7 @@ public:
         return client_id;
     }
 
-    static CProxy_Stencil& lookup(uint8_t name)
+    static CProxy_Stencil& lookup(uint8_t name,uint32_t ndims,uint32_t* dims,uint32_t odf)
     {
         auto find = stencil_table.find(name);
         if (find == std::end(stencil_table))
@@ -56,7 +56,7 @@ public:
                 CkPrintf("%" PRIu8 ", ", it.first);
             CkPrintf("\n");
 #endif
-            return create_stencil();
+            return create_stencil(name,ndims,dims,odf);
         }
         return find->second;
     }
@@ -66,8 +66,14 @@ public:
         char* cmd = msg + CmiMsgHeaderSizeBytes;
         uint8_t name = extract<uint8_t>(cmd);
         uint32_t epoch = extract<uint32_t>(cmd);
-        uint32_t size = extract<uint32_t>(cmd);
-        CProxy_Stencil& st = lookup(name);
+        // uint32_t size = extract<uint32_t>(cmd);
+        uint32_t ndims = extract<uint32_t>(cmd);
+        int32_t dims[ndims];
+        for(int i=0;i<ndims;i++)
+            dims[i]=(extract<uint32_t>(cmd));
+
+        uint32_t odf=extract<uint32_t>(cmd);
+        CProxy_Stencil& st = lookup(name,ndims,dims,odf);
         st.receive_graph(epoch, size, cmd);
     }
 
@@ -101,6 +107,21 @@ public:
     inline static void exit_server(char* msg)
     {
         CkExit();
+    }
+
+    CProxy_Stencil create_stencil(name,ndims,dims,odf){
+        uint32_t num_chare_x,num_chare_y,num_chare_z;
+        num_chare_x=num_chare_y=num_chare_z=1;
+
+        if(ndims>0)
+            num_chare_x=min(odf,dims[0]);
+        if(ndims>1)
+            num_chare_y=min(odf,dims[1]);
+        if(ndims>2)
+            num_chare_z=min(odf,dims[2]);
+        CProxy_Stencil newStencil=CProxy_Stencil::ckNew(ndims,dims,odf,num_chare_x,num_chare_y,num_chare_z);
+        insert(name,newStencil);
+        return newStencil;
     }
 };
 

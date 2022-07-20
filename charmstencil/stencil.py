@@ -142,6 +142,7 @@ class Stencil(object):
         self._fields.append(f)
         return f
 
+    #args would be num_args and field_names right?
     @final
     def exchange_ghosts(self, *args):
         if self.active_graph == self._iterate_graph:
