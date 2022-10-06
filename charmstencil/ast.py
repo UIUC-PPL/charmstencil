@@ -42,12 +42,12 @@ class FieldOperationNode(object):
         if self.opcode == 0:
             self.identifier += to_bytes(operands[0].name, 'B')
         else:
-            self.identifier += to_bytes(len(operands), 'B')
+            #self.identifier += to_bytes(len(operands), 'B')
             for op in operands:
                 if isinstance(op, Field):
-                    self.identifier += to_bytes(
-                        OPERAND_TYPES.get('field'), 'B'
-                    )
+                    #self.identifier += to_bytes(
+                    #    OPERAND_TYPES.get('field'), 'B'
+                    #)
                     self.identifier += op.graph.identifier
                 elif isinstance(op, slice):
                     self.identifier += to_bytes(OPERAND_TYPES.get('slice'), 'B')
@@ -70,11 +70,13 @@ class FieldOperationNode(object):
                     self.identifier += to_bytes(
                         OPERAND_TYPES.get('int'), 'B'
                     )
+                    self.identifier += to_bytes(0, 'B')
                     self.identifier += to_bytes(op, 'i')
                 elif isinstance(op, float):
                     self.identifier += to_bytes(
                         OPERAND_TYPES.get('double'), 'B'
                     )
+                    self.identifier += to_bytes(0, 'B')
                     self.identifier += to_bytes(op, 'd')
                 else:
                     raise ValueError('unrecognized operation')
@@ -83,6 +85,7 @@ class FieldOperationNode(object):
         start = 0 if key.start is None else key.start
         stop = 0 if key.stop is None else key.stop
         step = 1 if key.step is None else key.step
+        print(start, stop, step)
         buf = to_bytes(start, 'i')
         buf += to_bytes(stop, 'i')
         buf += to_bytes(step, 'i')

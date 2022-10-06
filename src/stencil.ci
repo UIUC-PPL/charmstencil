@@ -1,12 +1,14 @@
-mainmodule stencil
+module stencil
 {
     array [3D] Stencil
     {
-        entry Stencil(uint8_t name_,int ndims,int dims[ndims]);
+        entry Stencil(uint8_t name_, uint32_t ndims, uint32_t dims[ndims], uint32_t odf);
 
-        entry void Stencil(CkMigrateMessage* m);
+        entry void receive_graph(int epoch, int size, char cmd[size]);
 
-        entry void start(char* cmd)
+        entry void execute_graph(int epoch, int size, char cmd[size]);
+
+        entry void start()
         {
             while (EPOCH > -1)
             {

@@ -1,14 +1,14 @@
 import numpy as np
 from charmstencil.stencil import Stencil
 from charmstencil.linalg import norm
-from charmstencil.interface import DebugInterface, DummyInterface
+from charmstencil.interface import DebugInterface, DummyInterface, CCSInterface
 
 class Grid(Stencil):
     def __init__(self, n, interface):
         self.initialize(interface=interface, max_epochs=10)
         self.x = self.create_field(n, ghost_depth=1)
         self.y = self.create_field(n, ghost_depth=1)
-        self.apply_boundary(100.)
+        #self.apply_boundary(100.)
         self.threshold = 1e-8
         self.itercount = 0
 
@@ -17,7 +17,7 @@ class Grid(Stencil):
         self.x[-1] = self.y[-1] = bc
 
     def iterate(self, nsteps):
-        self.exchange_ghosts(self.x)
+        #self.exchange_ghosts(self.x)
         self.y[1:-1] = 0.5 * (self.x[:-2] + self.x[2:])
         self.x, self.y = self.y, self.x
         self.itercount += 1
@@ -28,7 +28,8 @@ class Grid(Stencil):
             return True
 
 if __name__ == '__main__':
-    interface = DebugInterface()
+    #interface = DebugInterface()
     #interface = DummyInterface()
+    interface = CCSInterface("172.17.0.1", 10000)
     grid = Grid(100, interface)
-    grid.solve(10)
+    grid.solve(1)

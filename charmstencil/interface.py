@@ -87,19 +87,22 @@ class CCSInterface(Interface):
             2. graph
         3. array of graph index
         '''
-        cmd = to_bytes(stencil_graph.stencil.name, 'B')
-        cmd += to_bytes(stencil_graph.epoch, 'I')
-        gcmd = to_bytes(len(stencil_graph.unique_graphs) - \
-                        stencil_graph.next_graph, 'B')
-        for g in stencil_graph.unique_graphs[stencil_graph.next_graph:]:
-            gcmd += to_bytes(len(g.identifier), 'I')
-            gcmd += g.identifier
-        gcmd += to_bytes(len(stencil_graph.graphs), 'I')
-        for graph in stencil_graph.graphs:
-            gcmd += to_bytes(graph, 'B')
-        cmd += to_bytes(len(gcmd), 'I')
-        cmd += gcmd
-        stencil_graph.next_graph = len(stencil_graph.unique_graphs)
+        #cmd = to_bytes(stencil_graph.stencil.name, 'B')
+        #cmd += to_bytes(stencil_graph.epoch, 'I')
+        #gcmd = to_bytes(len(stencil_graph.unique_graphs) - \
+        #                stencil_graph.next_graph, 'B')
+        #for g in stencil_graph.unique_graphs[stencil_graph.next_graph:]:
+        for g in stencil_graph.unique_graphs[2:]:
+            cmd = g.get_identifier()
+        #    gcmd += to_bytes(len(g.identifier), 'I')
+        #    gcmd += g.identifier
+        #gcmd += to_bytes(len(stencil_graph.graphs), 'I')
+        #for graph in stencil_graph.graphs:
+        #    gcmd += to_bytes(graph, 'B')
+        #cmd += to_bytes(len(gcmd), 'I')
+        #cmd += gcmd
+        #stencil_graph.next_graph = len(stencil_graph.unique_graphs)
+        print(cmd)
         self.send_command_async(Handlers.operation_handler, cmd)
 
     def send_command_raw(self, handler, msg, reply_size):

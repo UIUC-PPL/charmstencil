@@ -1,7 +1,5 @@
 mainmodule server
 {
-    extern module libaum;
-
     mainchare Main
     {
         entry Main(CkArgMsg*);
