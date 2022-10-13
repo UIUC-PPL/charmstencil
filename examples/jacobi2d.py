@@ -5,9 +5,9 @@ from charmstencil.interface import DebugInterface, CCSInterface
 
 class Grid(Stencil):
     def __init__(self, n, interface):
-        self.initialize(interface=interface, max_epochs=1000)
-        self.x = self.create_field(n, ghost_depth=1)
-        self.y = self.create_field(n, ghost_depth=1)
+        self.initialize(n, interface=interface, max_epochs=1000)
+        self.x = self.create_field(ghost_depth=1)
+        self.y = self.create_field(ghost_depth=1)
         #self.apply_boundary(100.)
         self.threshold = 1e-8
         self.itercount = 0
@@ -33,5 +33,5 @@ class Grid(Stencil):
 if __name__ == '__main__':
     #interface = DebugInterface()
     interface = CCSInterface("172.17.0.1", 10000)
-    grid = Grid((100, 100), interface)
+    grid = Grid((128, 128), interface)
     grid.solve(1)

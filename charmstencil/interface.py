@@ -26,7 +26,7 @@ class Interface(object):
     def delete_stencil(self, name):
         raise NotImplementedError('delete_stencil called from base class')
 
-    def evaluate_stencil(self, stencil_graph):
+    def evaluate_stencil(self, stencil):
         raise NotImplementedError('evaluate_stencil called from base class')
 
     def get(self, stencil_name, field_name):
@@ -40,7 +40,7 @@ class DummyInterface(Interface):
     def delete_stencil(self, name):
         pass
 
-    def evaluate_stencil(self, stencil_graph):
+    def evaluate_stencil(self, stencil):
         pass
 
     def get(self, stencil_name, field_name):
@@ -54,7 +54,7 @@ class DebugInterface(Interface):
     def delete_stencil(self, name):
         pass
 
-    def evaluate_stencil(self, stencil_graph):
+    def evaluate_stencil(self, stencil):
         stencil_graph.plot()
 
     def get(self, stencil_name, field_name):
@@ -78,31 +78,40 @@ class CCSInterface(Interface):
         cmd = to_bytes(name, 'B')
         self.send_command_async(Handlers.delete_handler, cmd)
 
-    def evaluate_stencil(self, stencil_graph):
+    def evaluate_stencil(self, stencil):
         '''
+        stencil name
         1. epoch
+        cmd size
         2. number of new unique graphs
         for each new graph
             1. size of graph
             2. graph
+        size of graph epochs section of cmd
+        number of graph epochs
         3. array of graph index
         '''
-        #cmd = to_bytes(stencil_graph.stencil.name, 'B')
-        #cmd += to_bytes(stencil_graph.epoch, 'I')
-        #gcmd = to_bytes(len(stencil_graph.unique_graphs) - \
-        #                stencil_graph.next_graph, 'B')
-        #for g in stencil_graph.unique_graphs[stencil_graph.next_graph:]:
-        for g in stencil_graph.unique_graphs[2:]:
-            cmd = g.get_identifier()
-        #    gcmd += to_bytes(len(g.identifier), 'I')
-        #    gcmd += g.identifier
-        #gcmd += to_bytes(len(stencil_graph.graphs), 'I')
-        #for graph in stencil_graph.graphs:
-        #    gcmd += to_bytes(graph, 'B')
-        #cmd += to_bytes(len(gcmd), 'I')
-        #cmd += gcmd
-        #stencil_graph.next_graph = len(stencil_graph.unique_graphs)
-        print(cmd)
+        from charmstencil.ast import CreateFieldNode
+        stencil_graph = stencil.stencil_graph
+        cmd = to_bytes(stencil_graph.stencil.name, 'B')
+        cmd += to_bytes(stencil_graph.epoch, 'I')
+        gcmd = to_bytes(len(stencil_graph.unique_graphs) - \
+                        stencil_graph.next_graph, 'B')
+        for g in stencil_graph.unique_graphs[stencil_graph.next_graph:]:
+            cmd_graph = g.get_identifier()
+            gcmd += to_bytes(len(cmd_graph), 'I')
+            gcmd += cmd_graph
+        #print(len(stencil_graph.graphs))
+        gcmd += to_bytes(len(stencil_graph.graphs), 'I')
+        for graph in stencil_graph.graphs:
+            gcmd += to_bytes(graph, 'B')
+        cmd += to_bytes(len(gcmd), 'I')
+        cmd += to_bytes(len(stencil.shape), 'B')
+        for s in stencil.shape:
+            cmd += to_bytes(s, 'I')
+        cmd += to_bytes(stencil.odf, 'B')
+        cmd += gcmd
+        stencil_graph.next_graph = len(stencil_graph.unique_graphs)
         self.send_command_async(Handlers.operation_handler, cmd)
 
     def send_command_raw(self, handler, msg, reply_size):

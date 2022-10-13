@@ -20,9 +20,13 @@ class CreateFieldNode(object):
     def __init__(self, name, shape, **kwargs):
         self.name = name
         self.shape = shape
+        self.ghost_depth = kwargs.pop('ghost_depth', 1)
         self.identifier = to_bytes(OPCODES.get('create'), 'B') + \
-            to_bytes(self.name, 'B')
+            to_bytes(self.name, 'B') + to_bytes(self.ghost_depth, 'B')
         # FIXME get ghost info from kwargs
+
+    def get_identifier(self):
+        return to_bytes(False, '?') + self.identifier
 
     def fill_plot(self, G, node_map={}, next_id=0, parent=None):
         G.add_node(next_id)
@@ -137,7 +141,7 @@ class ComputeGraph(object):
         self.graph.append(node)
 
     def get_identifier(self):
-        return b''.join([node.identifier for node in self.graph])
+        return to_bytes(True, '?') + b''.join([node.identifier for node in self.graph])
 
     def fill_plot(self, G, node_map={}, next_id=0, parent=None):
         for g in self.graph:

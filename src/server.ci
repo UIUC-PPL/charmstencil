@@ -1,5 +1,7 @@
 mainmodule server
 {
+    extern module stencil;
+
     mainchare Main
     {
         entry Main(CkArgMsg*);

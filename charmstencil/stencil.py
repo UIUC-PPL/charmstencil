@@ -81,10 +81,10 @@ class Field(object):
 
 
 class Stencil(object):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, shape, *args, **kwargs):
         """Stencil base class
         """
-        self.initialize(**kwargs)
+        self.initialize(shape, **kwargs)
 
     def __del__(self):
         if self._allocated:
@@ -114,10 +114,12 @@ class Stencil(object):
         self.active_graph = prev_graph
         return ret
 
-    def initialize(self, **kwargs):
+    def initialize(self, shape, **kwargs):
         self.interface = kwargs.pop('interface', DummyInterface())
         max_epochs = kwargs.pop('max_epochs', 10)
+        self.odf = kwargs.pop('odf', 4)
         self.name = get_stencil_name()
+        self.shape = shape
         self._next_field_id = 0
         self.stencil_graph = StencilGraph(self, max_epochs)
         self._boundary_graph = BoundaryGraph()
@@ -132,13 +134,13 @@ class Stencil(object):
         return field_name
 
     @final
-    def create_field(self, shape, **kwargs):
+    def create_field(self, **kwargs):
         if self.active_graph != self.stencil_graph:
             raise RuntimeError("fields cannot be created in iterate or "
                                "boundary functions")
         name = self.get_field_name()
-        f = Field(name, shape, self, **kwargs)
-        self.stencil_graph.insert(CreateFieldNode(name, shape, **kwargs))
+        f = Field(name, self.shape, self, **kwargs)
+        self.stencil_graph.insert(CreateFieldNode(name, self.shape, **kwargs))
         self._fields.append(f)
         return f
 
@@ -178,7 +180,7 @@ class Stencil(object):
             self._boundary_graph = BoundaryGraph()
             self.active_graph = self._boundary_graph
         if not self.stencil_graph.is_empty():
-            self.interface.evaluate_stencil(self.stencil_graph)
+            self.interface.evaluate_stencil(self)
             self.flush()
 
     def flush(self):
