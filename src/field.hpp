@@ -10,7 +10,7 @@ public:
 
     Field(uint32_t data_size)
     {
-        data.reserve(data_size);
+        data.resize(data_size);
         std::fill(data.begin(), data.end(), 0);
     }
 };
