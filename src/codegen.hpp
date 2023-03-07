@@ -11,7 +11,8 @@
 #include <fmt/format.h>
 
 
-typedef void* (*compute_fun_t)(std::vector<Field>&, std::vector<uint32_t>&, std::vector<int>&);
+typedef void* (*compute_fun_t)(std::vector<Field>&, std::vector<uint32_t>&, std::vector<int>&,
+        std::vector<uint32_t>&);
 
 
 template<class T>
@@ -100,7 +101,7 @@ Slice get_slice(char* &cmd, int ndims,
                 step = extract<int>(cmd);
 
                 key.index[i].start = start;
-                key.index[i].stop = stop < 0 ? stop + local_size[i] : stop;
+                key.index[i].stop = stop;
             }
         }
     }
@@ -109,33 +110,22 @@ Slice get_slice(char* &cmd, int ndims,
 }
 
 void generate_code(FILE* genfile, char* &cmd, int ndims, std::vector<uint32_t> ghost_depth,
-        std::vector<uint32_t> local_size, std::vector<uint32_t> num_chares);
+        std::vector<uint32_t> local_size, std::vector<uint32_t> num_chares,
+        std::vector<uint8_t> &ghost_fields);
 
 
 void generate_headers(FILE* genfile);
 
 
-std::string generate(char* cmd, uint32_t cmd_size, int ndims, 
+size_t generate(char* cmd, uint32_t cmd_size, int ndims, 
         std::vector<uint32_t> ghost_depth,
-        std::vector<uint32_t> local_size, std::vector<uint32_t> num_chares);
+        std::vector<uint32_t> local_size, std::vector<uint32_t> num_chares,
+        std::vector<uint8_t> &ghost_fields);
 
 
-compute_fun_t get_compute_fun(char* cmd, uint32_t cmd_size, int ndims, 
-        std::vector<uint32_t> ghost_depth,
-        std::vector<uint32_t> local_size, std::vector<uint32_t> num_chares)
+compute_fun_t load_compute_fun(size_t hash)
 {
-    std::string filename = generate(cmd, cmd_size, ndims, ghost_depth, 
-            local_size, num_chares);
-
-    // compile filename
-    std::string compile_cmd = fmt::format(
-            "g++ {}.cpp -o {}.so -I$STENCIL_PATH -shared -fPIC -std=c++17 -O3 -g", 
-            filename, filename);
-
-    system(compile_cmd.c_str());
-
-    // now load the compute func from the compiled shared object
-    
+    std::string filename = fmt::format("./stencil_{}", hash);
     void* handle = dlopen((filename + ".so").c_str(), RTLD_LAZY);
 
     if (!handle) 
@@ -148,8 +138,31 @@ compute_fun_t get_compute_fun(char* cmd, uint32_t cmd_size, int ndims,
     return fun;
 }
 
-std::string generate(char* cmd, uint32_t cmd_size, int ndims, std::vector<uint32_t> ghost_depth,
-        std::vector<uint32_t> local_size, std::vector<uint32_t> num_chares)
+
+size_t compile_compute_fun(char* cmd, uint32_t cmd_size, int ndims, 
+        std::vector<uint32_t> ghost_depth,
+        std::vector<uint32_t> local_size, std::vector<uint32_t> num_chares,
+        std::vector<uint8_t> &ghost_fields)
+{
+    size_t hash = generate(cmd, cmd_size, ndims, ghost_depth, 
+            local_size, num_chares, ghost_fields);
+
+    std::string filename = fmt::format("stencil_{}", hash);
+
+    // compile filename
+    std::string compile_cmd = fmt::format(
+            "g++ {}.cpp -o {}.so -I$STENCIL_PATH -shared -fPIC -std=c++17 -O3 -g", 
+            filename, filename);
+
+    system(compile_cmd.c_str());
+
+    // now load the compute func from the compiled shared object
+    return hash; 
+}
+
+size_t generate(char* cmd, uint32_t cmd_size, int ndims, std::vector<uint32_t> ghost_depth,
+        std::vector<uint32_t> local_size, std::vector<uint32_t> num_chares,
+        std::vector<uint8_t> &ghost_fields)
 {
     // first lookup local cache
     // if not found then lookup shared library of the name = hash of ast
@@ -159,23 +172,23 @@ std::string generate(char* cmd, uint32_t cmd_size, int ndims, std::vector<uint32
     size_t graph_hash = std::hash<std::string_view>{}(graph_str);
     // TODO: Add logic to check local cache here
 
-    std::string filename = fmt::format("/tmp/.charmstencil/stencil_{}", graph_hash);
+    std::string filename = fmt::format("stencil_{}", graph_hash);
     FILE* genfile = fopen((filename + ".cpp").c_str(), "w");
     fprintf(genfile, "#include <iostream>\n");
     fprintf(genfile, "#include <vector>\n");
     fprintf(genfile, "#include \"field.hpp\"\n\n");
     fprintf(genfile, "extern \"C\" {\n");
     fprintf(genfile, "void compute_func(std::vector<Field> &fields, "
-            "std::vector<uint32_t> &num_chares, std::vector<int> &index) {\n");
+            "std::vector<uint32_t> &num_chares, std::vector<int> &index, "
+            "std::vector<uint32_t> &local_size) {\n");
 
     // Add some prints for debugging
-    fprintf(genfile, "std::cout << \"Generated function called\\n\";\n");
+    //fprintf(genfile, "std::cout << \"Generated function called\\n\";\n");
 
-    generate_code(genfile, cmd, ndims, ghost_depth, local_size, num_chares);
-    fprintf(genfile, "}\n");
-    fprintf(genfile, "}\n");
+    generate_code(genfile, cmd, ndims, ghost_depth, local_size, num_chares, ghost_fields);
+    fprintf(genfile, "}\n}\n");
     fclose(genfile);
-    return filename;
+    return graph_hash;
 }
 
 
@@ -191,17 +204,14 @@ std::string generate_loop_rhs(FILE* genfile, char* &cmd, int ndims, uint32_t dep
 void generate_code(FILE* genfile, char* &cmd, int ndims, 
         std::vector<uint32_t> ghost_depth,
         std::vector<uint32_t> local_size, 
-        std::vector<uint32_t> num_chares)
+        std::vector<uint32_t> num_chares,
+        std::vector<uint8_t> &ghost_fields)
 {
     OperandType operand_type = lookup_type(extract<uint8_t>(cmd));
     uint8_t opcode = extract<uint8_t>(cmd);
     Operation oper = lookup_operation(opcode);
     switch (oper)
     {
-        case Operation::create:
-        {
-           return; 
-        }
         case Operation::setitem:
         {
             uint8_t ftype = extract<uint8_t>(cmd);
@@ -209,26 +219,32 @@ void generate_code(FILE* genfile, char* &cmd, int ndims,
             uint8_t fname = extract<uint8_t>(cmd);
             Slice key = get_slice(cmd, ndims, num_chares, local_size);
 
-            uint32_t depth = ghost_depth[fname];
+            // FIXME
+            uint32_t depth = 1; //ghost_depth[fname];
 
             fprintf(genfile, "Field& f%" PRIu8 " = fields[%" PRIu8 "];\n", fname, fname);
             fprintf(genfile, "int stop_idx[%i];\n", ndims);
             fprintf(genfile, "int step[%i];\n", ndims);
 
             // calculate stop index
+            // FIXME calculate the range correctly
             for(int i = 0; i < ndims; i++)
-                fprintf(genfile, "stop_idx[%i] = index[%i] == "
-                        "num_chares[%i] - 1 || index[%i] == 0 ? %i : %i;\n", 
-                    i, i, i, i, key.index[0].stop - depth, local_size[i] - depth);
+                fprintf(genfile, "stop_idx[%i] = (index[%i] == 0 ? local_size[%i] - 1 : "
+                        "(index[%i] == num_chares[%i] - 1 ? %i + local_size[%i] - 1 :"
+                        " %i + local_size[%i] - 1));\n",
+                    i, i, i, i, i, key.index[i].stop + depth, i, depth, i);
 
             // calculate local sizes with depth
             for(int i = 0; i < ndims; i++)
                 fprintf(genfile, "step[%i] = index[%i] == "
-                        "num_chares[%i] - 1 || index[%i] == 0 ? %i : %i;\n", 
-                    i, i, i, i, local_size[i] + depth, local_size[i] + 2 * depth);
+                        "num_chares[%i] - 1 || index[%i] == 0 ? "
+                        "%i + local_size[%i] : %i + local_size[%i];\n", 
+                    i, i, i, i, depth, i, 2 * depth, i);
+
+            fprintf(genfile, "int count = 0;\n");
  
             // write the loops
-            for (int i = 0; i < ndims; i++)
+            for (int i = ndims - 1; i >= 0; i--)
                 fprintf(genfile, "for (int d%i = 0; d%i * %i"
                         " < stop_idx[%i]; d%i++) {\n", 
                         i, i, key.index[i].step, i, i);
@@ -236,26 +252,41 @@ void generate_code(FILE* genfile, char* &cmd, int ndims,
             std::string index_str;
 
             if (ndims == 1)
-                index_str = fmt::format("d0 * {} + {}", key.index[0].step, depth);
+                index_str = fmt::format("d0 * {} + {}", key.index[0].step, key.index[0].start);
             if (ndims == 2)
                 index_str = fmt::format("d0 * {} + {} + step[0] * (d1 * {} + {})", 
-                        key.index[0].step, depth, key.index[1].step, depth);
+                        key.index[0].step, key.index[0].start, key.index[1].step, key.index[1].step);
             if (ndims == 3)
                 index_str = fmt::format(
                         "d0 * {} + {} + step[0] * (d1 * {} + {}) + step[0] * step[1] * (d2 * {} + {})", 
-                        key.index[0].step, depth, key.index[1].step, depth,
-                        key.index[2].step, depth);
+                        key.index[0].step, key.index[0].start, key.index[1].step, key.index[1].start,
+                        key.index[2].step, key.index[2].start);
+
+            //fprintf(genfile, "count++;\n");
 
             fprintf(genfile, "f%i.data[%s] = %s;\n", fname, index_str.c_str(), 
                     generate_loop_rhs(genfile, cmd, ndims, depth, local_size, num_chares).c_str());
 
             for (int i = 0; i < ndims; i++)
                 fprintf(genfile, "}\n");
+
+            //fprintf(genfile, "std::cout << \"Loop iterations = \" << count << std::endl;\n");
+            break;
         }
         case Operation::norm:
         {}
         case Operation::exchange_ghosts:
-        {}
+        {
+            // FIXME going to assume the first statement is ghost exchange 
+            uint8_t num_ghost_fields = extract<uint8_t>(cmd);
+            for (int i = 0; i < num_ghost_fields; i++)
+            {
+                uint8_t fname = extract<uint8_t>(cmd);
+                ghost_fields.push_back(fname);
+            }
+            generate_code(genfile, cmd, ndims, ghost_depth, local_size, num_chares, ghost_fields);
+            break;
+        }
         default:
         {}
     }
@@ -327,12 +358,12 @@ std::string generate_loop_rhs(FILE* genfile, char* &cmd, int ndims, uint32_t dep
                 index_str = fmt::format("{} + d0 * {}", 
                         key.index[0].start, key.index[0].step);
             if (ndims == 2)
-                index_str = fmt::format("step[0] * ({} + d0 * {}) + ({} + d1 * {})", 
+                index_str = fmt::format("step[0] * ({} + d1 * {}) + ({} + d0 * {})", 
                         key.index[1].start, key.index[1].step,
                         key.index[0].start, key.index[0].step);
             if (ndims == 3)
                 index_str = fmt::format(
-                        "step[0] * step[1] * ({} + d0 * {}) + step[0] * ({} + d1 * {}) + ({} + d2 * {})", 
+                        "step[0] * step[1] * ({} + d2 * {}) + step[0] * ({} + d1 * {}) + ({} + d0 * {})", 
                         key.index[2].start, key.index[2].step,
                         key.index[1].start, key.index[1].step,
                         key.index[0].start, key.index[0].step);

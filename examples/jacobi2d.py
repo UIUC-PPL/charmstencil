@@ -13,7 +13,7 @@ class Grid(Stencil):
         self.itercount = 0
 
     def iterate(self, nsteps):
-        #self.exchange_ghosts(self.x)
+        self.exchange_ghosts(self.x)
         self.y[1:-1, 1:-1] = 0.25 * (self.x[:-2, 1:-1] + self.x[2:, 1:-1] +
                                      self.x[1:-1, :-2] + self.x[1:-1, 2:])
         self.x, self.y = self.y, self.x

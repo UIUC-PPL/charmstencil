@@ -17,6 +17,7 @@ class Handlers(object):
     fetch_handler = b'aum_fetch'
     delete_handler = b'aum_delete'
     exit_handler = b'aum_exit'
+    sync_handler = b'aum_sync'
 
 
 class Interface(object):
@@ -55,7 +56,7 @@ class DebugInterface(Interface):
         pass
 
     def evaluate_stencil(self, stencil):
-        stencil_graph.plot()
+        stencil.stencil_graph.plot()
 
     def get(self, stencil_name, field_name):
         return None
@@ -72,7 +73,11 @@ class CCSInterface(Interface):
 
     def disconnect(self):
         cmd = to_bytes(self.client_id, 'B')
-        self.send_command_async(Handlers.disconnection_handler, cmd)
+        #self.send_command_async(Handlers.disconnection_handler, cmd)
+
+    def sync_stencil(self, name):
+        cmd = to_bytes(name, 'B')
+        res = self.send_command(Handlers.sync_handler, cmd)
 
     def delete_stencil(self, name):
         cmd = to_bytes(name, 'B')

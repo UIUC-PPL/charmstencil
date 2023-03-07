@@ -1,5 +1,16 @@
 module stencil
 {
+    readonly CProxy_CodeGenCache codegen_proxy;
+
+    nodegroup CodeGenCache
+    {
+        entry CodeGenCache();
+
+        entry [reductiontarget] void start_time(double time);
+
+        entry [reductiontarget] void end_time(double time);
+    };
+
     array [3D] Stencil
     {
         entry Stencil(uint8_t name_, uint32_t ndims, uint32_t dims[ndims], uint32_t odf);
@@ -7,6 +18,8 @@ module stencil
         entry void receive_graph(int epoch, int size, char cmd[size]);
 
         entry void execute_graph(int epoch, int size, char cmd[size]);
+
+        entry void receive_ghost(uint8_t fname, int dir, int size, double data[size]);
 
         entry void start()
         {
@@ -19,7 +32,23 @@ module stencil
             }
         };
 
-        entry void receiveGhost(int dir,int index,int size,int res[size]);
+        entry [threaded] void wait(ck::future<bool> done);
 
-    }
+        // entry void iterate(uint8_t gid)
+        // {
+        //     while (num_ghost_recv < num_nbrs)
+        //     {
+        //         when receive_ghost(uint8_t fname, int dir, int size, double data[size])
+        //             serial "process_ghost" {
+        //                 process_ghost(fname, dir, size, data);
+        //                 num_ghost_recv++;
+        //             }
+        //     }
+        //     serial "done_exchange" {
+        //         num_ghost_recv = 0;
+        //         call_compute(gid);
+        //         run_next_iteration();
+        //     }
+        // };
+    };
 }

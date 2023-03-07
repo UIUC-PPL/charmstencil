@@ -45,6 +45,10 @@ class FieldOperationNode(object):
         self.identifier += to_bytes(self.opcode, 'B')
         if self.opcode == 0:
             self.identifier += to_bytes(operands[0].name, 'B')
+        elif self.opcode == 8:
+            self.identifier += to_bytes(len(operands), 'B')
+            for op in operands:
+                self.identifier += to_bytes(op.name, 'B')
         else:
             #self.identifier += to_bytes(len(operands), 'B')
             for op in operands:
@@ -89,7 +93,6 @@ class FieldOperationNode(object):
         start = 0 if key.start is None else key.start
         stop = 0 if key.stop is None else key.stop
         step = 1 if key.step is None else key.step
-        print(start, stop, step)
         buf = to_bytes(start, 'i')
         buf += to_bytes(stop, 'i')
         buf += to_bytes(step, 'i')

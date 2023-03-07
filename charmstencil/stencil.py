@@ -50,17 +50,17 @@ class Field(object):
 
     def __add__(self, other):
         node = FieldOperationNode('+', [self, other])
-        return Field(self.stencil.get_field_name(), self.shape, self.stencil,
+        return Field(self.name, self.shape, self.stencil,
                      graph=node)
 
     def __sub__(self, other):
         node = FieldOperationNode('-', [self, other])
-        return Field(self.stencil.get_field_name(), self.shape, self.stencil,
+        return Field(self.name, self.shape, self.stencil,
                      graph=node)
 
     def __mul__(self, other):
         node = FieldOperationNode('*', [self, other])
-        return Field(self.stencil.get_field_name(), self.shape, self.stencil,
+        return Field(self.name, self.shape, self.stencil,
                      graph=node)
 
     def __rmul__(self, other):
@@ -113,6 +113,9 @@ class Stencil(object):
             raise RuntimeError("apply_boundary cannot be called here")
         self.active_graph = prev_graph
         return ret
+
+    def sync(self):
+        self.interface.sync_stencil(self.name)
 
     def initialize(self, shape, **kwargs):
         self.interface = kwargs.pop('interface', DummyInterface())
