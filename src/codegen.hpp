@@ -126,6 +126,10 @@ size_t generate(char* cmd, uint32_t cmd_size, int ndims,
         std::vector<uint32_t> local_size, std::vector<uint32_t> num_chares,
         std::vector<uint8_t> &ghost_fields);
 
+size_t generate_cuda(char* cmd, uint32_t cmd_size, int ndims, std::vector<uint32_t> ghost_depth,
+        std::vector<uint32_t> local_size, std::vector<uint32_t> num_chares,
+        std::vector<uint8_t> &ghost_fields);
+
 
 compute_fun_t load_compute_fun(size_t hash)
 {
@@ -239,7 +243,7 @@ size_t generate_cuda(char* cmd, uint32_t cmd_size, int ndims, std::vector<uint32
     //fprintf(genfile, "std::cout << \"Generated function called\\n\";\n");
 
     generate_code(genfile, cmd, ndims, ghost_depth, local_size, num_chares, ghost_fields);
-    fprintf(genfile, "}\n);
+    fprintf(genfile, "}\n");
     fclose(genfile);
     return graph_hash;
 }
