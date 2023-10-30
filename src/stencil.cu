@@ -184,7 +184,7 @@ void* get_module(std::string &fatbin_file)
     return buffer;
 }
 
-CUfunction load_kernel(std::string &hash)
+CUfunction load_kernel(size_t &hash)
 {
     CUmodule cumodule;
     CUfunction kernel;
