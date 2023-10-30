@@ -231,7 +231,6 @@ size_t generate_cuda(char* cmd, uint32_t cmd_size, int ndims, std::vector<uint32
     std::string filename = fmt::format("stencil_{}", graph_hash);
     FILE* genfile = fopen((filename + ".cu").c_str(), "w");
     fprintf(genfile, "#include <iostream>\n");
-    fprintf(genfile, "#include <vector>\n");
     fprintf(genfile, "#include \"hapi.h\"\n");
     fprintf(genfile, "__global__ void compute_func(double** fields, "
             "uint32_t* num_chares, int* index, uint32_t* local_size) {\n");

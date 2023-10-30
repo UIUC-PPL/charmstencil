@@ -1,6 +1,4 @@
 CHARMC=/home/adityapb/charm/charm/netlrts-linux-x86_64/bin/charmc
-BASE_DIR=/home/adityapb/charm/LibAum
-LIBS_DIR=$(BASE_DIR)
 OPTS=-c++-option -std=c++17 -O3 -g -ldl -DNDEBUG
 
 all: server

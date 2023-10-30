@@ -1,6 +1,5 @@
 #include <stack>
 #include <cinttypes>
-#include <variant>
 #include <queue>
 #include <unordered_map>
 #include "stencil.hpp"
