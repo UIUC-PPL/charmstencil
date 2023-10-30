@@ -10,14 +10,9 @@
 #include "charm++.h"
 #define FMT_HEADER_ONLY
 #include <fmt/format.h>
-
-
 #include "hapi.h"
-typedef CUfunction compute_fn_t
 
-//typedef void* (*compute_fun_t)(std::vector<Field>&, std::vector<uint32_t>&, std::vector<int>&,
-//        std::vector<uint32_t>&);
-
+typedef CUfunction compute_fun_t;
 
 
 template<class T>
