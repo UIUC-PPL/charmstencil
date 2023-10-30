@@ -107,60 +107,60 @@ void fb_unpacking_kernel(double* f, double* ghost_data, int ghost_depth,
 
 
 void invoke_rl_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t local_size)
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size)
 {
     dim3 block(BSZ2D, BSZ2D);
-    dim3 grid(ceil((float) local_size / BSZ2D), ceil((float) local_size / BSZ2D));
+    dim3 grid(ceil((float) local_size[1] / BSZ2D), ceil((float) local_size[2] / BSZ2D));
     rl_packing_kernel<<<grid, block>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
         stepx, stepy, local_size);
     hapiCheck(cudaPeekAtLastError());
 }
 
 void invoke_ud_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t local_size)
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size)
 {
     dim3 block(BSZ2D, BSZ2D);
-    dim3 grid(ceil((float) local_size / BSZ2D), ceil((float) local_size / BSZ2D));
+    dim3 grid(ceil((float) local_size[0] / BSZ2D), ceil((float) local_size[1] / BSZ2D));
     ud_packing_kernel<<<grid, block>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
         stepx, stepy, local_size);
     hapiCheck(cudaPeekAtLastError());
 }
 
 void invoke_fb_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t local_size)
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size)
 {
     dim3 block(BSZ2D, BSZ2D);
-    dim3 grid(ceil((float) local_size / BSZ2D), ceil((float) local_size / BSZ2D));
+    dim3 grid(ceil((float) local_size[0] / BSZ2D), ceil((float) local_size[2] / BSZ2D));
     fb_packing_kernel<<<grid, block>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
         stepx, stepy, local_size);
     hapiCheck(cudaPeekAtLastError());
 }
 
 void invoke_rl_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t local_size)
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size)
 {
     dim3 block(BSZ2D, BSZ2D);
-    dim3 grid(ceil((float) local_size / BSZ2D), ceil((float) local_size / BSZ2D));
+    dim3 grid(ceil((float) local_size[1] / BSZ2D), ceil((float) local_size[2] / BSZ2D));
     rl_unpacking_kernel<<<grid, block>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
         stepx, stepy, local_size);
     hapiCheck(cudaPeekAtLastError());
 }
 
 void invoke_ud_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t local_size)
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size)
 {
     dim3 block(BSZ2D, BSZ2D);
-    dim3 grid(ceil((float) local_size / BSZ2D), ceil((float) local_size / BSZ2D));
+    dim3 grid(ceil((float) local_size[0] / BSZ2D), ceil((float) local_size[1] / BSZ2D));
     ud_unpacking_kernel<<<grid, block>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
         stepx, stepy, local_size);
     hapiCheck(cudaPeekAtLastError());
 }
 
 void invoke_fb_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t local_size)
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size)
 {
     dim3 block(BSZ2D, BSZ2D);
-    dim3 grid(ceil((float) local_size / BSZ2D), ceil((float) local_size / BSZ2D));
+    dim3 grid(ceil((float) local_size[0] / BSZ2D), ceil((float) local_size[2] / BSZ2D));
     fb_unpacking_kernel<<<grid, block>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
         stepx, stepy, local_size);
     hapiCheck(cudaPeekAtLastError());

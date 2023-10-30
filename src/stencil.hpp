@@ -14,17 +14,17 @@
 
 
 extern void invoke_fb_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t local_size);
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size);
 extern void invoke_ud_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t local_size);
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size);
 extern void invoke_rl_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t local_size);
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size);
 extern void invoke_fb_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t local_size);
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size);
 extern void invoke_ud_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t local_size);
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size);
 extern void invoke_rl_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t local_size);
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size);
 extern void invoke_init_fields(std::vector<double*> &fields, int total_size);
 extern CUfunction load_kernel(size_t &hash);
 extern void launch_kernel(void** args, uint32_t* local_size, int* block_sizes, 
