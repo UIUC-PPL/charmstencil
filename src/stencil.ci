@@ -2,6 +2,8 @@ module stencil
 {
     readonly CProxy_CodeGenCache codegen_proxy;
 
+    message PersistentMsg;
+
     nodegroup CodeGenCache
     {
         entry CodeGenCache();
@@ -13,15 +15,18 @@ module stencil
 
     array [3D] Stencil
     {
-        entry Stencil(uint8_t name_, uint32_t ndims, uint32_t dims[ndims], uint32_t odf);
+        entry Stencil(uint8_t name_, uint32_t ndims, uint32_t dims[ndims], uint32_t odf,
+            bool is_gpu_);
+
+        entry void init_recv(int dir, CkDevicePersistent p_buf);
 
         entry void receive_graph(int epoch, int size, char cmd[size]);
 
         entry void execute_graph(int epoch, int size, char cmd[size]);
 
-        entry void receive_ghost(uint8_t fname, int dir, int size, double data[size]);
+        entry void receive_ghost(PersistentMsg* msg);
 
-        entry void start()
+        entry [reductiontarget] void start()
         {
             while (EPOCH > -1)
             {

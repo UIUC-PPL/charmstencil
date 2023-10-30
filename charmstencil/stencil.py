@@ -146,6 +146,15 @@ class Stencil(object):
         self.stencil_graph.insert(CreateFieldNode(name, self.shape, **kwargs))
         self._fields.append(f)
         return f
+        #raise NotImplementedError("Use create_fields()")
+    
+    @final
+    def create_fields(self, num_fields, **kwargs):
+        for i in range(num_fields):
+            name = self.get_field_name()
+            f = Field(name, self.shape, self, **kwargs)
+            self._fields.append(f)
+        return self._fields
 
     #args would be num_args and field_names right?
     @final

@@ -11,8 +11,12 @@
 #include <fmt/format.h>
 
 
-typedef void* (*compute_fun_t)(std::vector<Field>&, std::vector<uint32_t>&, std::vector<int>&,
-        std::vector<uint32_t>&);
+#include "hapi.h"
+typedef CUfunction compute_fn_t
+
+//typedef void* (*compute_fun_t)(std::vector<Field>&, std::vector<uint32_t>&, std::vector<int>&,
+//        std::vector<uint32_t>&);
+
 
 
 template<class T>
@@ -160,6 +164,27 @@ size_t compile_compute_fun(char* cmd, uint32_t cmd_size, int ndims,
     return hash; 
 }
 
+size_t compile_compute_kernel_cuda(char* cmd, uint32_t cmd_size, int ndims, 
+        std::vector<uint32_t> ghost_depth,
+        std::vector<uint32_t> local_size, std::vector<uint32_t> num_chares,
+        std::vector<uint8_t> &ghost_fields)
+{
+    size_t hash = generate_cuda(cmd, cmd_size, ndims, ghost_depth, 
+            local_size, num_chares, ghost_fields);
+
+    std::string filename = fmt::format("stencil_{}", hash);
+
+    // compile filename
+    std::string compile_cmd = fmt::format(
+            "nvcc -std=c++11 -arch sm_60 {}.cu -o {}.fatbin -I$STENCIL_PATH -O3 -g --fatbin -lcuda", 
+            filename, filename);
+
+    system(compile_cmd.c_str());
+
+    // now load the compute func from the compiled shared object
+    return hash; 
+}
+
 size_t generate(char* cmd, uint32_t cmd_size, int ndims, std::vector<uint32_t> ghost_depth,
         std::vector<uint32_t> local_size, std::vector<uint32_t> num_chares,
         std::vector<uint8_t> &ghost_fields)
@@ -187,6 +212,36 @@ size_t generate(char* cmd, uint32_t cmd_size, int ndims, std::vector<uint32_t> g
 
     generate_code(genfile, cmd, ndims, ghost_depth, local_size, num_chares, ghost_fields);
     fprintf(genfile, "}\n}\n");
+    fclose(genfile);
+    return graph_hash;
+}
+
+size_t generate_cuda(char* cmd, uint32_t cmd_size, int ndims, std::vector<uint32_t> ghost_depth,
+        std::vector<uint32_t> local_size, std::vector<uint32_t> num_chares,
+        std::vector<uint8_t> &ghost_fields)
+{
+    // first lookup local cache
+    // if not found then lookup shared library of the name = hash of ast
+    // if not found then lookup generated code of name = hash of ast
+    // else generate code and compile and load function dynamically
+    std::string_view graph_str(cmd, cmd_size);
+    size_t graph_hash = std::hash<std::string_view>{}(graph_str);
+    // TODO: Add logic to check local cache here
+
+    std::string filename = fmt::format("stencil_{}", graph_hash);
+    FILE* genfile = fopen((filename + ".cu").c_str(), "w");
+    fprintf(genfile, "#include <iostream>\n");
+    fprintf(genfile, "#include <vector>\n");
+    fprintf(genfile, "#include \"hapi.h\"\n");
+    fprintf(genfile, "#include \"field.hpp\"\n\n");
+    fprintf(genfile, "__global__ void compute_func(Field* fields, "
+            "uint32_t* num_chares, int* index, uint32_t* local_size) {\n");
+
+    // Add some prints for debugging
+    //fprintf(genfile, "std::cout << \"Generated function called\\n\";\n");
+
+    generate_code(genfile, cmd, ndims, ghost_depth, local_size, num_chares, ghost_fields);
+    fprintf(genfile, "}\n);
     fclose(genfile);
     return graph_hash;
 }
@@ -248,6 +303,115 @@ void generate_code(FILE* genfile, char* &cmd, int ndims,
                 fprintf(genfile, "for (int d%i = 0; d%i * %i"
                         " < stop_idx[%i]; d%i++) {\n", 
                         i, i, key.index[i].step, i, i);
+
+            std::string index_str;
+
+            if (ndims == 1)
+                index_str = fmt::format("d0 * {} + {}", key.index[0].step, key.index[0].start);
+            if (ndims == 2)
+                index_str = fmt::format("d0 * {} + {} + step[0] * (d1 * {} + {})", 
+                        key.index[0].step, key.index[0].start, key.index[1].step, key.index[1].step);
+            if (ndims == 3)
+                index_str = fmt::format(
+                        "d0 * {} + {} + step[0] * (d1 * {} + {}) + step[0] * step[1] * (d2 * {} + {})", 
+                        key.index[0].step, key.index[0].start, key.index[1].step, key.index[1].start,
+                        key.index[2].step, key.index[2].start);
+
+            //fprintf(genfile, "count++;\n");
+
+            fprintf(genfile, "f%i.data[%s] = %s;\n", fname, index_str.c_str(), 
+                    generate_loop_rhs(genfile, cmd, ndims, depth, local_size, num_chares).c_str());
+
+            for (int i = 0; i < ndims; i++)
+                fprintf(genfile, "}\n");
+
+            //fprintf(genfile, "std::cout << \"Loop iterations = \" << count << std::endl;\n");
+            break;
+        }
+        case Operation::norm:
+        {}
+        case Operation::exchange_ghosts:
+        {
+            // FIXME going to assume the first statement is ghost exchange 
+            uint8_t num_ghost_fields = extract<uint8_t>(cmd);
+            for (int i = 0; i < num_ghost_fields; i++)
+            {
+                uint8_t fname = extract<uint8_t>(cmd);
+                ghost_fields.push_back(fname);
+            }
+            generate_code(genfile, cmd, ndims, ghost_depth, local_size, num_chares, ghost_fields);
+            break;
+        }
+        default:
+        {}
+    }
+}
+
+void generate_code_cuda(FILE* genfile, char* &cmd, int ndims, 
+        std::vector<uint32_t> ghost_depth,
+        std::vector<uint32_t> local_size, 
+        std::vector<uint32_t> num_chares,
+        std::vector<uint8_t> &ghost_fields)
+{
+    OperandType operand_type = lookup_type(extract<uint8_t>(cmd));
+    uint8_t opcode = extract<uint8_t>(cmd);
+    Operation oper = lookup_operation(opcode);
+    switch (oper)
+    {
+        case Operation::setitem:
+        {
+            uint8_t ftype = extract<uint8_t>(cmd);
+            uint8_t fname_optype = extract<uint8_t>(cmd);
+            uint8_t fname = extract<uint8_t>(cmd);
+            Slice key = get_slice(cmd, ndims, num_chares, local_size);
+
+            // FIXME
+            uint32_t depth = 1; //ghost_depth[fname];
+
+            fprintf(genfile, "Field& f%" PRIu8 " = fields[%" PRIu8 "];\n", fname, fname);
+            fprintf(genfile, "int stop_idx[%i];\n", ndims);
+            fprintf(genfile, "int step[%i];\n", ndims);
+
+            char dims[3] = {'x', 'y', 'z'};
+
+            for(int i = 0; i < ndims; i++)
+                fprintf(genfile, "int d%i = threadIdx.%c + blockDim.%c * blockIdx.%c;", 
+                    i, dims[i], dims[i], dims[i]);
+
+            // calculate stop index
+            // FIXME calculate the range correctly
+            for(int i = 0; i < ndims; i++)
+                fprintf(genfile, "stop_idx[%i] = (index[%i] == 0 ? local_size[%i] - 1 : "
+                        "(index[%i] == num_chares[%i] - 1 ? %i + local_size[%i] - 1 :"
+                        " %i + local_size[%i] - 1));\n",
+                    i, i, i, i, i, key.index[i].stop + depth, i, depth, i);
+
+            // calculate local sizes with depth
+            for(int i = 0; i < ndims; i++)
+                fprintf(genfile, "step[%i] = index[%i] == "
+                        "num_chares[%i] - 1 || index[%i] == 0 ? "
+                        "%i + local_size[%i] : %i + local_size[%i];\n", 
+                    i, i, i, i, depth, i, 2 * depth, i);
+
+            //fprintf(genfile, "int count = 0;\n");
+ 
+            // write the loops
+            /*for (int i = ndims - 1; i >= 0; i--)
+                fprintf(genfile, "for (int d%i = 0; d%i * %i"
+                        " < stop_idx[%i]; d%i++) {\n", 
+                        i, i, key.index[i].step, i, i);*/
+
+            // check for bounds
+            if (ndims == 1)
+                fprintf(genfile, "if(d0 * %i >= stop_idx[0])\n",
+                    key.index[0].step);
+            if (ndims == 2)
+                fprintf(genfile, "if(d0 * %i >= stop_idx[0] || d1 * %i >= stop_idx[1])\n",
+                    key.index[0].step, key.index[1].step);
+            if (ndims == 3)
+                fprintf(genfile, "if(d0 * %i >= stop_idx[0] || d1 * %i >= stop_idx[1] || d2 * %i >= stop_idx[2])\n",
+                    key.index[0].step, key.index[1].step, key.index[2].step);
+            fprintf(genfile, "return;\n");
 
             std::string index_str;
 
