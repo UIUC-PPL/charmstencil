@@ -129,8 +129,8 @@ public:
     std::vector<CkDevicePersistent> p_recv_bufs;
     std::vector<CkDevicePersistent> p_neighbor_bufs;
         
-    double* send_ghosts;
-    double* recv_ghosts;
+    double** send_ghosts;
+    double** recv_ghosts;
 
     Stencil(uint8_t name_, uint32_t ndims_, uint32_t* dims_, uint32_t odf_, bool is_gpu_)
         : EPOCH(0)
@@ -206,6 +206,9 @@ public:
 
 
         ghost_size = ghost_depth[0] * local_size[0] * local_size[0];
+
+        send_ghosts = (double**) malloc(num_nbrs * sizeof(double*));
+        recv_ghosts = (double**) malloc(num_nbrs * sizeof(double*));
 
         if (is_gpu)
         {
@@ -400,8 +403,14 @@ public:
 
             // TODO don't hardcode this
             int block_sizes[3] = {8, 8, 8};
-            double** fields_ptr = fields.begin();
-            void* args[4] = {&fields_ptr, &num_chares, &index, &local_size};
+            //double** fields_ptr = fields.begin();
+            int nfields = fields.size();
+            void* args[nfields + 3];
+            for(int i = 0; i < nfields; i++)
+                args[i] = &fields[i];
+            args[nfields] = &num_chares;
+            args[nfields + 1] = &index;
+            args[nfields + 2] = &local_size;
             double start_comp = CkTimer();
             launch_kernel(args, local_size, block_sizes, compute_f, compute_stream);
             //compute_f(fields, num_chares, index, local_size);

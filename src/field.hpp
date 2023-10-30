@@ -9,24 +9,15 @@ public:
 
     Field() {}
 
-    Field(uint32_t data_size, bool is_gpu)
+    Field(uint32_t data_size)
     {
-        if (is_gpu)
-        {
-            hapiCheck(cudaMalloc((void**) &data, sizeof(double) * data_size));
-        }
-        else
-        {
-            data = (double*) malloc(sizeof(double) * data_size);
-        }
+        hapiCheck(cudaMalloc((void**) &data, sizeof(double) * data_size));
+
     }
 
     ~Field()
     {
-        if (is_gpu)
-            hapiCheck(cudaFree(data));
-        else
-            free(data);
+        hapiCheck(cudaFree(data));
     }
 };
 
