@@ -220,7 +220,8 @@ size_t generate(char* cmd, uint32_t cmd_size, int ndims, std::vector<uint32_t> g
     return graph_hash;
 }
 
-size_t generate_cuda(char* cmd, uint32_t cmd_size, int ndims, std::vector<uint32_t> ghost_depth,
+size_t generate_cuda(char* cmd, uint32_t cmd_size, int ndims, int num_fields,
+        std::vector<uint32_t> ghost_depth,
         std::vector<uint32_t> local_size, std::vector<uint32_t> num_chares,
         std::vector<uint8_t> &ghost_fields)
 {
@@ -232,12 +233,19 @@ size_t generate_cuda(char* cmd, uint32_t cmd_size, int ndims, std::vector<uint32
     size_t graph_hash = std::hash<std::string_view>{}(graph_str);
     // TODO: Add logic to check local cache here
 
+    // make string of all fields as arguments
+    std::string fields_args = "";
+    for (int i = 0; i < num_fields, i++)
+    {
+        fields_args += fmt::format("double* f{}, ", i);
+    }
+
     std::string filename = fmt::format("stencil_{}", graph_hash);
     FILE* genfile = fopen((filename + ".cu").c_str(), "w");
     fprintf(genfile, "#include <iostream>\n");
     fprintf(genfile, "#include \"hapi.h\"\n");
-    fprintf(genfile, "__global__ void compute_func(double** fields, "
-            "uint32_t* num_chares, int* index, uint32_t* local_size) {\n");
+    fprintf(genfile, "__global__ void compute_func(%s "
+            "uint32_t* num_chares, int* index, uint32_t* local_size) {\n", fields_args);
 
     // Add some prints for debugging
     //fprintf(genfile, "std::cout << \"Generated function called\\n\";\n");
@@ -370,7 +378,6 @@ void generate_code_cuda(FILE* genfile, char* &cmd, int ndims,
             // FIXME
             uint32_t depth = 1; //ghost_depth[fname];
 
-            fprintf(genfile, "double* f%" PRIu8 " = fields[%" PRIu8 "];\n", fname, fname);
             fprintf(genfile, "int stop_idx[%i];\n", ndims);
             fprintf(genfile, "int step[%i];\n", ndims);
 
@@ -480,7 +487,7 @@ std::string generate_loop_rhs(FILE* genfile, char* &cmd, int ndims, uint32_t dep
                 case OperandType::field:
                 {
                     uint8_t fname = extract<uint8_t>(cmd);
-                    res = fmt::format("fields[{}]", fname);
+                    res = fmt::format("f{}", fname);
                     break;
                 }
                 default:
