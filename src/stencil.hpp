@@ -255,10 +255,13 @@ public:
     ~Stencil()
     {
         delete_cache();
-        if (is_gpu)
-            hapiCheck(cudaFree(ghost_data));
-        else
-            free(ghost_data);
+        for (int i = 0; i < num_nbrs; i++)
+        {
+            hapiCheck(cudaFree(send_ghosts[i]));
+            hapiCheck(cudaFree(recv_ghosts[i]));
+        }
+        free(send_ghosts);
+        free(recv_ghosts);
     }
 
     void init_recv(int dir, CkDevicePersistent p_buf)
