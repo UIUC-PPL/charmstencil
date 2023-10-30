@@ -14,17 +14,17 @@
 
 
 extern void invoke_fb_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, int local_size);
+    int starty, int startz, int stepx, int stepy, uint32_t local_size);
 extern void invoke_ud_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, int local_size);
+    int starty, int startz, int stepx, int stepy, uint32_t local_size);
 extern void invoke_rl_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, int local_size);
+    int starty, int startz, int stepx, int stepy, uint32_t local_size);
 extern void invoke_fb_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, int local_size);
+    int starty, int startz, int stepx, int stepy, uint32_t local_size);
 extern void invoke_ud_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, int local_size);
+    int starty, int startz, int stepx, int stepy, uint32_t local_size);
 extern void invoke_rl_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, int local_size);
+    int starty, int startz, int stepx, int stepy, uint32_t local_size);
 extern void invoke_init_fields(std::vector<double*> &fields, int total_size);
 extern CUfunction load_kernel(size_t &hash);
 extern void launch_kernel(void** args, uint32_t* local_size, int* block_sizes, 
@@ -616,7 +616,7 @@ public:
         int startx, starty, startz;
         double* recv_ghost = recv_ghosts[msg->dir];
         double* f = fields[msg->fname];
-        int depth = ghost_depth[fname];
+        int depth = ghost_depth[msg->fname];
         if (ndims == 3)
         {
             switch (msg->dir)
@@ -635,9 +635,6 @@ public:
                     start_x = bounds[LEFT] ? 0 : 1;
                     start_y = bounds[FRONT] ? 0 : 1;
                     start_z = bounds[DOWN] ? local_size[2] : local_size[2] + 1;
-                    stop_x = start_x + local_size[0];
-                    stop_y = start_y + local_size[1];
-                    stop_z = start_z + 1;
                     invoke_ud_unpacking_kernel(f, recv_ghost, depth, 
                         startx, starty, startz, step[0], step[1], local_size);
                     break;
