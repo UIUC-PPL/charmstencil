@@ -625,7 +625,7 @@ public:
                     startx = bounds[LEFT] ? 0 : 1;
                     starty = bounds[FRONT] ? 0 : 1;
                     startz = 0;
-                    ud_unpacking_kernel(f, recv_ghost, ghost_depth, 
+                    invoke_ud_unpacking_kernel(f, recv_ghost, ghost_depth, 
                         startx, starty, startz, step[0], step[1], local_size);
                     break;
                 }
@@ -637,7 +637,7 @@ public:
                     stop_x = start_x + local_size[0];
                     stop_y = start_y + local_size[1];
                     stop_z = start_z + 1;
-                    ud_unpacking_kernel(f, recv_ghost, ghost_depth, 
+                    invoke_ud_unpacking_kernel(f, recv_ghost, ghost_depth, 
                         startx, starty, startz, step[0], step[1], local_size);
                     break;
                 }
@@ -646,7 +646,7 @@ public:
                     startx = 0;
                     starty = bounds[FRONT] ? 0 : 1;
                     startz = bounds[DOWN] ? 0 : 1;
-                    rl_unpacking_kernel(f, recv_ghost, ghost_depth, 
+                    invoke_rl_unpacking_kernel(f, recv_ghost, ghost_depth, 
                         startx, starty, startz, step[0], step[1], local_size);
                     break;
                 }
@@ -655,7 +655,7 @@ public:
                     startx = bounds[LEFT] ? local_size[0] : local_size[0] + 1;
                     starty = bounds[FRONT] ? 0 : 1;
                     startz = bounds[DOWN] ? 0 : 1;
-                    rl_unpacking_kernel(f, recv_ghost, ghost_depth, 
+                    invoke_rl_unpacking_kernel(f, recv_ghost, ghost_depth, 
                         startx, starty, startz, step[0], step[1], local_size);
                     break;
                 }
@@ -664,7 +664,7 @@ public:
                     startx = bounds[LEFT] ? 0 : 1;
                     starty = 0;
                     startz = bounds[DOWN] ? 0 : 1;
-                    fb_unpacking_kernel(f, recv_ghost, ghost_depth, 
+                    invoke_fb_unpacking_kernel(f, recv_ghost, ghost_depth, 
                         startx, starty, startz, step[0], step[1], local_size);
                     break;
                 }
@@ -673,7 +673,7 @@ public:
                     startx = bounds[LEFT] ? 0 : 1;
                     starty = bounds[FRONT] ? local_size[1] : local_size[1] + 1;
                     startz = bounds[DOWN] ? 0 : 1;
-                    fb_unpacking_kernel(f, recv_ghost, ghost_depth, 
+                    invoke_fb_unpacking_kernel(f, recv_ghost, ghost_depth, 
                         startx, starty, startz, step[0], step[1], local_size);
                     break;
                 }
