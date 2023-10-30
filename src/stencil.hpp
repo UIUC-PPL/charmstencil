@@ -13,7 +13,21 @@
 #define UP 5
 
 
+extern void invoke_fb_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
+    int starty, int startz, int stepx, int stepy, int local_size);
+extern void invoke_ud_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
+    int starty, int startz, int stepx, int stepy, int local_size);
+extern void invoke_rl_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
+    int starty, int startz, int stepx, int stepy, int local_size);
+extern void invoke_fb_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
+    int starty, int startz, int stepx, int stepy, int local_size);
+extern void invoke_ud_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
+    int starty, int startz, int stepx, int stepy, int local_size);
+extern void invoke_rl_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
+    int starty, int startz, int stepx, int stepy, int local_size);
 extern void invoke_init_fields(std::vector<double*> &fields, int total_size);
+extern void launch_kernel(void** args, uint32_t* local_size, int* block_sizes, 
+    CUfunction& compute_kernel, cudaStream_t& stream);
 
 
 CProxy_CodeGenCache codegen_proxy;
@@ -210,21 +224,14 @@ public:
         send_ghosts = (double**) malloc(num_nbrs * sizeof(double*));
         recv_ghosts = (double**) malloc(num_nbrs * sizeof(double*));
 
-        if (is_gpu)
-        {
-            hapiCheck(cudaStreamCreateWithPriority(&compute_stream, cudaStreamDefault, 0));
-            hapiCheck(cudaStreamCreateWithPriority(&comm_stream, cudaStreamDefault, -1));
-            
+        hapiCheck(cudaStreamCreateWithPriority(&compute_stream, cudaStreamDefault, 0));
+        hapiCheck(cudaStreamCreateWithPriority(&comm_stream, cudaStreamDefault, -1));
+        
 
-            for (int i = 0; i < num_nbrs; i++)
-            {
-                hapiCheck(cudaMalloc((void**)&send_ghosts[i], sizeof(double) * ghost_size));
-                hapiCheck(cudaMalloc((void**)&recv_ghosts[i], sizeof(double) * ghost_size));
-            }
-        }
-        else
+        for (int i = 0; i < num_nbrs; i++)
         {
-            ghost_data = (double*) malloc(ghost_size * sizeof(double));
+            hapiCheck(cudaMalloc((void**)&send_ghosts[i], sizeof(double) * ghost_size));
+            hapiCheck(cudaMalloc((void**)&recv_ghosts[i], sizeof(double) * ghost_size));
         }
 
         CkCallback recv_cb = CkCallback(CkIndex_Stencil::receive_ghost(nullptr), thisProxy[thisIndex]);

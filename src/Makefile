@@ -1,5 +1,5 @@
-CHARMC=/home/adityapb/charm/charm/netlrts-linux-x86_64/bin/charmc
-OPTS=-c++-option -std=c++17 -O3 -g -ldl -DNDEBUG
+CHARMC=/u/bhosale/charm/mpi-linux-x86_64-cuda/bin/charmc
+OPTS=-c++-option -std=c++17 -O3 -g -ldl -I/u/bhosale/fmt/include -DNDEBUG
 
 all: server
 

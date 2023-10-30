@@ -235,7 +235,7 @@ size_t generate_cuda(char* cmd, uint32_t cmd_size, int ndims, int num_fields,
 
     // make string of all fields as arguments
     std::string fields_args = "";
-    for (int i = 0; i < num_fields, i++)
+    for (int i = 0; i < num_fields; i++)
     {
         fields_args += fmt::format("double* f{}, ", i);
     }
