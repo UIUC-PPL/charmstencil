@@ -26,7 +26,7 @@ extern void invoke_ud_packing_kernel(double* f, double* ghost_data, int ghost_de
 extern void invoke_rl_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
     int starty, int startz, int stepx, int stepy, int local_size);
 extern void invoke_init_fields(std::vector<double*> &fields, int total_size);
-extern CUfunction load_kernel(std::string &hash);
+extern CUfunction load_kernel(size_t &hash);
 extern void launch_kernel(void** args, uint32_t* local_size, int* block_sizes, 
     CUfunction& compute_kernel, cudaStream_t& stream);
 
