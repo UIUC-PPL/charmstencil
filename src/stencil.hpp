@@ -615,9 +615,10 @@ public:
         double start_recv = CkTimer();
         int startx, starty, startz;
         double* recv_ghost = recv_ghosts[msg->dir];
+        double* f = fields[msg->fname];
+        int depth = ghost_depth[fname];
         if (ndims == 3)
         {
-            double* f = fields[msg->fname];
             switch (msg->dir)
             {
                 case DOWN:
@@ -625,7 +626,7 @@ public:
                     startx = bounds[LEFT] ? 0 : 1;
                     starty = bounds[FRONT] ? 0 : 1;
                     startz = 0;
-                    invoke_ud_unpacking_kernel(f, recv_ghost, ghost_depth, 
+                    invoke_ud_unpacking_kernel(f, recv_ghost, depth, 
                         startx, starty, startz, step[0], step[1], local_size);
                     break;
                 }
@@ -637,7 +638,7 @@ public:
                     stop_x = start_x + local_size[0];
                     stop_y = start_y + local_size[1];
                     stop_z = start_z + 1;
-                    invoke_ud_unpacking_kernel(f, recv_ghost, ghost_depth, 
+                    invoke_ud_unpacking_kernel(f, recv_ghost, depth, 
                         startx, starty, startz, step[0], step[1], local_size);
                     break;
                 }
@@ -646,7 +647,7 @@ public:
                     startx = 0;
                     starty = bounds[FRONT] ? 0 : 1;
                     startz = bounds[DOWN] ? 0 : 1;
-                    invoke_rl_unpacking_kernel(f, recv_ghost, ghost_depth, 
+                    invoke_rl_unpacking_kernel(f, recv_ghost, depth, 
                         startx, starty, startz, step[0], step[1], local_size);
                     break;
                 }
@@ -655,7 +656,7 @@ public:
                     startx = bounds[LEFT] ? local_size[0] : local_size[0] + 1;
                     starty = bounds[FRONT] ? 0 : 1;
                     startz = bounds[DOWN] ? 0 : 1;
-                    invoke_rl_unpacking_kernel(f, recv_ghost, ghost_depth, 
+                    invoke_rl_unpacking_kernel(f, recv_ghost, depth, 
                         startx, starty, startz, step[0], step[1], local_size);
                     break;
                 }
@@ -664,7 +665,7 @@ public:
                     startx = bounds[LEFT] ? 0 : 1;
                     starty = 0;
                     startz = bounds[DOWN] ? 0 : 1;
-                    invoke_fb_unpacking_kernel(f, recv_ghost, ghost_depth, 
+                    invoke_fb_unpacking_kernel(f, recv_ghost, depth, 
                         startx, starty, startz, step[0], step[1], local_size);
                     break;
                 }
@@ -673,7 +674,7 @@ public:
                     startx = bounds[LEFT] ? 0 : 1;
                     starty = bounds[FRONT] ? local_size[1] : local_size[1] + 1;
                     startz = bounds[DOWN] ? 0 : 1;
-                    invoke_fb_unpacking_kernel(f, recv_ghost, ghost_depth, 
+                    invoke_fb_unpacking_kernel(f, recv_ghost, depth, 
                         startx, starty, startz, step[0], step[1], local_size);
                     break;
                 }
