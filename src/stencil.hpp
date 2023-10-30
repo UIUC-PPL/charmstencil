@@ -13,7 +13,21 @@
 #define UP 5
 
 
+extern void invoke_fb_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
+    int starty, int startz, int stepx, int stepy, int local_size);
+extern void invoke_ud_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
+    int starty, int startz, int stepx, int stepy, int local_size);
+extern void invoke_rl_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
+    int starty, int startz, int stepx, int stepy, int local_size);
+extern void invoke_fb_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
+    int starty, int startz, int stepx, int stepy, int local_size);
+extern void invoke_ud_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
+    int starty, int startz, int stepx, int stepy, int local_size);
+extern void invoke_rl_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
+    int starty, int startz, int stepx, int stepy, int local_size);
 extern void invoke_init_fields(std::vector<double*> &fields, int total_size);
+extern void launch_kernel(void** args, uint32_t* local_size, int* block_sizes, 
+    CUfunction& compute_kernel, cudaStream_t& stream);
 
 
 CProxy_CodeGenCache codegen_proxy;
@@ -129,8 +143,8 @@ public:
     std::vector<CkDevicePersistent> p_recv_bufs;
     std::vector<CkDevicePersistent> p_neighbor_bufs;
         
-    double* send_ghosts;
-    double* recv_ghosts;
+    double** send_ghosts;
+    double** recv_ghosts;
 
     Stencil(uint8_t name_, uint32_t ndims_, uint32_t* dims_, uint32_t odf_, bool is_gpu_)
         : EPOCH(0)
@@ -207,21 +221,17 @@ public:
 
         ghost_size = ghost_depth[0] * local_size[0] * local_size[0];
 
-        if (is_gpu)
-        {
-            hapiCheck(cudaStreamCreateWithPriority(&compute_stream, cudaStreamDefault, 0));
-            hapiCheck(cudaStreamCreateWithPriority(&comm_stream, cudaStreamDefault, -1));
-            
+        send_ghosts = (double**) malloc(num_nbrs * sizeof(double*));
+        recv_ghosts = (double**) malloc(num_nbrs * sizeof(double*));
 
-            for (int i = 0; i < num_nbrs; i++)
-            {
-                hapiCheck(cudaMalloc((void**)&send_ghosts[i], sizeof(double) * ghost_size));
-                hapiCheck(cudaMalloc((void**)&recv_ghosts[i], sizeof(double) * ghost_size));
-            }
-        }
-        else
+        hapiCheck(cudaStreamCreateWithPriority(&compute_stream, cudaStreamDefault, 0));
+        hapiCheck(cudaStreamCreateWithPriority(&comm_stream, cudaStreamDefault, -1));
+        
+
+        for (int i = 0; i < num_nbrs; i++)
         {
-            ghost_data = (double*) malloc(ghost_size * sizeof(double));
+            hapiCheck(cudaMalloc((void**)&send_ghosts[i], sizeof(double) * ghost_size));
+            hapiCheck(cudaMalloc((void**)&recv_ghosts[i], sizeof(double) * ghost_size));
         }
 
         CkCallback recv_cb = CkCallback(CkIndex_Stencil::receive_ghost(nullptr), thisProxy[thisIndex]);
@@ -252,10 +262,13 @@ public:
     ~Stencil()
     {
         delete_cache();
-        if (is_gpu)
-            hapiCheck(cudaFree(ghost_data));
-        else
-            free(ghost_data);
+        for (int i = 0; i < num_nbrs; i++)
+        {
+            hapiCheck(cudaFree(send_ghosts[i]));
+            hapiCheck(cudaFree(recv_ghosts[i]));
+        }
+        free(send_ghosts);
+        free(recv_ghosts);
     }
 
     void init_recv(int dir, CkDevicePersistent p_buf)
@@ -400,8 +413,14 @@ public:
 
             // TODO don't hardcode this
             int block_sizes[3] = {8, 8, 8};
-            double** fields_ptr = fields.begin();
-            void* args[4] = {&fields_ptr, &num_chares, &index, &local_size};
+            //double** fields_ptr = fields.begin();
+            int nfields = fields.size();
+            void* args[nfields + 3];
+            for(int i = 0; i < nfields; i++)
+                args[i] = &fields[i];
+            args[nfields] = &num_chares;
+            args[nfields + 1] = &index;
+            args[nfields + 2] = &local_size;
             double start_comp = CkTimer();
             launch_kernel(args, local_size, block_sizes, compute_f, compute_stream);
             //compute_f(fields, num_chares, index, local_size);
