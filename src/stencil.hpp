@@ -26,6 +26,7 @@ extern void invoke_ud_packing_kernel(double* f, double* ghost_data, int ghost_de
 extern void invoke_rl_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
     int starty, int startz, int stepx, int stepy, int local_size);
 extern void invoke_init_fields(std::vector<double*> &fields, int total_size);
+extern CUfunction load_kernel(std::string &hash);
 extern void launch_kernel(void** args, uint32_t* local_size, int* block_sizes, 
     CUfunction& compute_kernel, cudaStream_t& stream);
 
@@ -146,7 +147,7 @@ public:
     double** send_ghosts;
     double** recv_ghosts;
 
-    Stencil(uint8_t name_, uint32_t ndims_, uint32_t* dims_, uint32_t odf_, bool is_gpu_)
+    Stencil(uint8_t name_, uint32_t ndims_, uint32_t* dims_, uint32_t odf_)
         : EPOCH(0)
         , name(name_)
         , ndims(ndims_)
@@ -157,11 +158,9 @@ public:
         , num_iters(0)
         , sent_ghosts(false)
         , recv_ghost_time(0)
-        , is_gpu(is_gpu_)
+        , is_gpu(true)
         , init_count(0)
     {
-        index = std::vector<int>(3);
-
         index[0] = thisIndex.x;
         index[1] = thisIndex.y;
         index[2] = thisIndex.z;
@@ -509,6 +508,7 @@ public:
         for (int i = 0; i < fnames.size(); i++)
         {
             uint8_t fname = fnames[i];
+            int depth = ghost_depth[fname];
             if (ndims == 3)
             {
                 // FIXME different sizes in different dimensions
@@ -523,7 +523,7 @@ public:
                     stop_x = start_x + local_size[0];
                     stop_y = start_y + local_size[1];
                     stop_z = start_z + 1;
-                    invoke_ud_packing_kernel(f, send_ghosts[DOWN], ghost_depth, start_x,
+                    invoke_ud_packing_kernel(f, send_ghosts[DOWN], depth, start_x,
                         start_y, start_z, step[0], step[1], local_size);
                     send_persistent(fname, DOWN, UP);
                 }
@@ -535,7 +535,7 @@ public:
                     stop_x = start_x + local_size[0];
                     stop_y = start_y + local_size[1];
                     stop_z = start_z + 1;
-                    invoke_ud_packing_kernel(f, send_ghosts[UP], ghost_depth, start_x,
+                    invoke_ud_packing_kernel(f, send_ghosts[UP], depth, start_x,
                         start_y, start_z, step[0], step[1], local_size);
                     send_persistent(fname, UP, DOWN);
                 }
@@ -547,7 +547,7 @@ public:
                     stop_x = start_x + 1;
                     stop_y = start_y + local_size[1];
                     stop_z = start_z + local_size[2];
-                    invoke_rl_packing_kernel(f, send_ghosts[LEFT], ghost_depth, start_x,
+                    invoke_rl_packing_kernel(f, send_ghosts[LEFT], depth, start_x,
                         start_y, start_z, step[0], step[1], local_size);
                     send_persistent(fname, LEFT, RIGHT);
                 }
@@ -559,7 +559,7 @@ public:
                     stop_x = start_x + 1;
                     stop_y = start_y + local_size[1];
                     stop_z = start_z + local_size[2];
-                    invoke_rl_packing_kernel(f, send_ghosts[RIGHT], ghost_depth, start_x,
+                    invoke_rl_packing_kernel(f, send_ghosts[RIGHT], depth, start_x,
                         start_y, start_z, step[0], step[1], local_size);
                     send_persistent(fname, RIGHT, LEFT);
                 }
@@ -571,7 +571,7 @@ public:
                     stop_x = start_x + local_size[0];
                     stop_y = start_y + 1;
                     stop_z = start_z + local_size[2];
-                    invoke_fb_packing_kernel(f, send_ghosts[FRONT], ghost_depth, start_x,
+                    invoke_fb_packing_kernel(f, send_ghosts[FRONT], depth, start_x,
                         start_y, start_z, step[0], step[1], local_size);
                     send_persistent(fname, FRONT, BACK);
                 }
@@ -583,7 +583,7 @@ public:
                     stop_x = start_x + local_size[0];
                     stop_y = start_y + 1;
                     stop_z = start_z + local_size[2];
-                    invoke_fb_packing_kernel(f, send_ghosts[BACK], ghost_depth, start_x,
+                    invoke_fb_packing_kernel(f, send_ghosts[BACK], depth, start_x,
                         start_y, start_z, step[0], step[1], local_size);
                     send_persistent(fname, BACK, FRONT);
                 }
@@ -613,8 +613,7 @@ public:
         //CkPrintf("Processing ghost at (%i, %i, %i) from %i\n", thisIndex.x, 
         //        thisIndex.y, thisIndex.z, dir);
         double start_recv = CkTimer();
-        int start_x, start_y, start_z;
-        int stop_x, stop_y, stop_z;
+        int startx, starty, startz;
         double* recv_ghost = recv_ghosts[msg->dir];
         if (ndims == 3)
         {
@@ -623,13 +622,10 @@ public:
             {
                 case DOWN:
                 {
-                    start_x = bounds[LEFT] ? 0 : 1;
-                    start_y = bounds[FRONT] ? 0 : 1;
-                    start_z = 0;
-                    stop_x = start_x + local_size[0];
-                    stop_y = start_y + local_size[1];
-                    stop_z = start_z + 1;
-                    ud_unpacking_kernel(f.data, recv_ghost, ghost_depth, 
+                    startx = bounds[LEFT] ? 0 : 1;
+                    starty = bounds[FRONT] ? 0 : 1;
+                    startz = 0;
+                    invoke_ud_unpacking_kernel(f, recv_ghost, ghost_depth, 
                         startx, starty, startz, step[0], step[1], local_size);
                     break;
                 }
@@ -641,55 +637,43 @@ public:
                     stop_x = start_x + local_size[0];
                     stop_y = start_y + local_size[1];
                     stop_z = start_z + 1;
-                    ud_unpacking_kernel(f.data, recv_ghost, ghost_depth, 
+                    invoke_ud_unpacking_kernel(f, recv_ghost, ghost_depth, 
                         startx, starty, startz, step[0], step[1], local_size);
                     break;
                 }
                 case LEFT:
                 {
-                    start_x = 0;
-                    start_y = bounds[FRONT] ? 0 : 1;
-                    start_z = bounds[DOWN] ? 0 : 1;
-                    stop_x = start_x + 1;
-                    stop_y = start_y + local_size[1];
-                    stop_z = start_z + local_size[2];
-                    rl_unpacking_kernel(f.data, recv_ghost, ghost_depth, 
+                    startx = 0;
+                    starty = bounds[FRONT] ? 0 : 1;
+                    startz = bounds[DOWN] ? 0 : 1;
+                    invoke_rl_unpacking_kernel(f, recv_ghost, ghost_depth, 
                         startx, starty, startz, step[0], step[1], local_size);
                     break;
                 }
                 case RIGHT:
                 {
-                    start_x = bounds[LEFT] ? local_size[0] : local_size[0] + 1;
-                    start_y = bounds[FRONT] ? 0 : 1;
-                    start_z = bounds[DOWN] ? 0 : 1;
-                    stop_x = start_x + 1;
-                    stop_y = start_y + local_size[1];
-                    stop_z = start_z + local_size[2];
-                    rl_unpacking_kernel(f.data, recv_ghost, ghost_depth, 
+                    startx = bounds[LEFT] ? local_size[0] : local_size[0] + 1;
+                    starty = bounds[FRONT] ? 0 : 1;
+                    startz = bounds[DOWN] ? 0 : 1;
+                    invoke_rl_unpacking_kernel(f, recv_ghost, ghost_depth, 
                         startx, starty, startz, step[0], step[1], local_size);
                     break;
                 }
                 case FRONT:
                 {
-                    start_x = bounds[LEFT] ? 0 : 1;
-                    start_y = 0;
-                    start_z = bounds[DOWN] ? 0 : 1;
-                    stop_x = start_x + local_size[0];
-                    stop_y = start_y + 1;
-                    stop_z = start_z + local_size[2];
-                    fb_unpacking_kernel(f.data, recv_ghost, ghost_depth, 
+                    startx = bounds[LEFT] ? 0 : 1;
+                    starty = 0;
+                    startz = bounds[DOWN] ? 0 : 1;
+                    invoke_fb_unpacking_kernel(f, recv_ghost, ghost_depth, 
                         startx, starty, startz, step[0], step[1], local_size);
                     break;
                 }
                 case BACK:
                 {
-                    start_x = bounds[LEFT] ? 0 : 1;
-                    start_y = bounds[FRONT] ? local_size[1] : local_size[1] + 1;
-                    start_z = bounds[DOWN] ? 0 : 1;
-                    stop_x = start_x + local_size[0];
-                    stop_y = start_y + 1;
-                    stop_z = start_z + local_size[2];
-                    fb_unpacking_kernel(f.data, recv_ghost, ghost_depth, 
+                    startx = bounds[LEFT] ? 0 : 1;
+                    starty = bounds[FRONT] ? local_size[1] : local_size[1] + 1;
+                    startz = bounds[DOWN] ? 0 : 1;
+                    invoke_fb_unpacking_kernel(f, recv_ghost, ghost_depth, 
                         startx, starty, startz, step[0], step[1], local_size);
                     break;
                 }
