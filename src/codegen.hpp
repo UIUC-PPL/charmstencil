@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <string_view>
 #include <dlfcn.h>
+#include <cuda.h>
 #include "charm++.h"
 #define FMT_HEADER_ONLY
 #include <fmt/format.h>
