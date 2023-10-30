@@ -112,13 +112,13 @@ public:
     std::vector<double*> fields;
     std::vector<uint32_t> ghost_depth;  // stores the depth of the ghosts corresponding to each field
 
-    std::vector<uint32_t> local_size;
-    std::vector<uint32_t> step;
-    std::vector<uint32_t> num_chares;
-    std::vector<int> index;
+    uint32_t local_size[3];
+    uint32_t step[3];
+    uint32_t num_chares[3];
+    int index[3];
     
     uint32_t start_x, start_y, start_z;
-    std::vector<uint32_t> dims;
+    uint32_t dims[3];
     int init_count;
     bool bounds[6];
 
@@ -152,13 +152,13 @@ public:
         index[1] = thisIndex.y;
         index[2] = thisIndex.z;
 
-        local_size = std::vector<uint32_t>(3, 0);
-        step = std::vector<uint32_t>(3, 0);
-        num_chares = std::vector<uint32_t>(3, 1);
-        dims = std::vector<uint32_t>(3, 0);
-
-        for(int i = 0; i < ndims; i++)
+        for (int i = 0; i < ndims; i++)
+        {
+            local_size[i] = 0;
+            step[i] = 0;
+            num_chares[i] = 1;
             dims[i] = dims_[i];
+        }
 
         uint32_t total_chares = odf * CkNumPes();
 
@@ -399,9 +399,11 @@ public:
             //CkPrintf("Local size = %i, %i, %i\n", local_size[0], local_size[1], local_size[2]);
 
             // TODO don't hardcode this
-            block_sizes[3] = {8, 8, 8};
+            int block_sizes[3] = {8, 8, 8};
+            double** fields_ptr = fields.begin();
+            void* args[4] = {&fields_ptr, &num_chares, &index, &local_size};
             double start_comp = CkTimer();
-            launch_kernel(local_size, block_sizes, compute_f, compute_stream);
+            launch_kernel(args, local_size, block_sizes, compute_f, compute_stream);
             //compute_f(fields, num_chares, index, local_size);
             comp_time += (CkTimer() - start_comp);
         }

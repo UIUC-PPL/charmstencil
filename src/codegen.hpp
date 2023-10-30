@@ -233,8 +233,7 @@ size_t generate_cuda(char* cmd, uint32_t cmd_size, int ndims, std::vector<uint32
     fprintf(genfile, "#include <iostream>\n");
     fprintf(genfile, "#include <vector>\n");
     fprintf(genfile, "#include \"hapi.h\"\n");
-    fprintf(genfile, "#include \"field.hpp\"\n\n");
-    fprintf(genfile, "__global__ void compute_func(Field* fields, "
+    fprintf(genfile, "__global__ void compute_func(double** fields, "
             "uint32_t* num_chares, int* index, uint32_t* local_size) {\n");
 
     // Add some prints for debugging
@@ -368,7 +367,7 @@ void generate_code_cuda(FILE* genfile, char* &cmd, int ndims,
             // FIXME
             uint32_t depth = 1; //ghost_depth[fname];
 
-            fprintf(genfile, "Field& f%" PRIu8 " = fields[%" PRIu8 "];\n", fname, fname);
+            fprintf(genfile, "double* f%" PRIu8 " = fields[%" PRIu8 "];\n", fname, fname);
             fprintf(genfile, "int stop_idx[%i];\n", ndims);
             fprintf(genfile, "int step[%i];\n", ndims);
 
@@ -428,7 +427,7 @@ void generate_code_cuda(FILE* genfile, char* &cmd, int ndims,
 
             //fprintf(genfile, "count++;\n");
 
-            fprintf(genfile, "f%i.data[%s] = %s;\n", fname, index_str.c_str(), 
+            fprintf(genfile, "f%i[%s] = %s;\n", fname, index_str.c_str(), 
                     generate_loop_rhs(genfile, cmd, ndims, depth, local_size, num_chares).c_str());
 
             for (int i = 0; i < ndims; i++)
