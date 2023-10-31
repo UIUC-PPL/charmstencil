@@ -5,6 +5,7 @@
 #include <fstream>
 #include <cstring>
 #include <fmt/format.h>
+#include "hapi.h"
 
 #define COMPUTE_FUNC "_Z12compute_funcv"
 
@@ -21,7 +22,7 @@ void init_fields(double** fields, int num_fields, int total_size)
     {
         for (int i = 0; i < num_fields; i++)
         {
-            double* f = fields[i]
+            double* f = fields[i];
             f[d0] = 0;
         }
     }
@@ -36,7 +37,7 @@ void rl_packing_kernel(double* f, double* ghost_data, int ghost_depth,
     int k = blockDim.y * blockIdx.y + threadIdx.y;
 
     if (j < local_size && k < local_size)
-        for (int i = 0; i < depth; i++)
+        for (int i = 0; i < ghost_depth; i++)
             ghost_data[IDX(i, j, k, ghost_depth, local_size)] = f[IDX(startx + i, starty + j, startz + k, stepx, stepy)];
 }
 
@@ -50,7 +51,7 @@ void ud_packing_kernel(double* f, double* ghost_data, int ghost_depth,
     int j = blockDim.y * blockIdx.y + threadIdx.y;
 
     if (i < local_size && j < local_size)
-        for (int k = 0; k < depth; k++)
+        for (int k = 0; k < ghost_depth; k++)
             ghost_data[IDX(i, j, k, ghost_depth, local_size)] = f[IDX(startx + i, starty + j, startz + k, stepx, stepy)];
 }
 
@@ -62,7 +63,7 @@ void fb_packing_kernel(double* f, double* ghost_data, int ghost_depth,
     int k = blockDim.y * blockIdx.y + threadIdx.y;
 
     if (i < local_size && k < local_size)
-        for (int j = 0; j < depth; j++)
+        for (int j = 0; j < ghost_depth; j++)
             ghost_data[IDX(i, j, k, ghost_depth, local_size)] = f[IDX(startx + i, starty + j, startz + k, stepx, stepy)];
 }
 
@@ -75,7 +76,7 @@ void rl_unpacking_kernel(double* f, double* ghost_data, int ghost_depth,
     int k = blockDim.y * blockIdx.y + threadIdx.y;
 
     if (j < local_size && k < local_size)
-        for (int i = 0; i < depth; i++)
+        for (int i = 0; i < ghost_depth; i++)
             f[IDX(startx + i, starty + j, startz + k, stepx, stepy)] = ghost_data[IDX(i, j, k, ghost_depth, local_size)];
 }
 
@@ -89,7 +90,7 @@ void ud_unpacking_kernel(double* f, double* ghost_data, int ghost_depth,
     int j = blockDim.y * blockIdx.y + threadIdx.y;
 
     if (i < local_size && j < local_size)
-        for (int k = 0; k < depth; k++)
+        for (int k = 0; k < ghost_depth; k++)
             f[IDX(startx + i, starty + j, startz + k, stepx, stepy)] = ghost_data[IDX(i, j, k, ghost_depth, local_size)];
 }
 
@@ -101,7 +102,7 @@ void fb_unpacking_kernel(double* f, double* ghost_data, int ghost_depth,
     int k = blockDim.y * blockIdx.y + threadIdx.y;
 
     if (i < local_size && k < local_size)
-        for (int j = 0; j < depth; j++)
+        for (int j = 0; j < ghost_depth; j++)
             f[IDX(startx + i, starty + j, startz + k, stepx, stepy)] = ghost_data[IDX(i, j, k, ghost_depth, local_size)];
 }
 
