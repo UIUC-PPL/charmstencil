@@ -195,12 +195,12 @@ CUfunction load_kernel(size_t &hash)
 void launch_kernel(void** args, uint32_t* local_size, int* block_sizes, 
     CUfunction& compute_kernel, cudaStream_t& stream)
 {
-    // currently only supports 3d grids
-    dim3 block(block_sizes[0], block_sizes[1], block_sizes[2]);
-    dim3 grid(ceil(((float) local_size[0]) / block_sizes[0]),
-              ceil(((float) local_size[1]) / block_sizes[1]),
-              ceil(((float) local_size[2]) / block_sizes[2]));
     // figure out how to load compute kernel
-    cuLaunchKernel(compute_kernel, grid, block, 0, stream, args, NULL);
+    cuLaunchKernel(compute_kernel, 
+        ceil(((float) local_size[0]) / block_sizes[0]),
+        ceil(((float) local_size[1]) / block_sizes[1]),
+        ceil(((float) local_size[2]) / block_sizes[2]),
+        block_sizes[0], block_sizes[1], block_sizes[2],
+        0, stream, args, NULL);
     hapiCheck(cudaPeekAtLastError());
 }
