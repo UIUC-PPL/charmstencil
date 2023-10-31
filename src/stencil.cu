@@ -113,7 +113,7 @@ void invoke_rl_packing_kernel(double* f, double* ghost_data, int ghost_depth, in
     dim3 block(BSZ2D, BSZ2D);
     dim3 grid(ceil((float) local_size[1] / BSZ2D), ceil((float) local_size[2] / BSZ2D));
     rl_packing_kernel<<<grid, block>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
-        stepx, stepy, local_size);
+        stepx, stepy, local_size[0]);
     hapiCheck(cudaPeekAtLastError());
 }
 
@@ -123,7 +123,7 @@ void invoke_ud_packing_kernel(double* f, double* ghost_data, int ghost_depth, in
     dim3 block(BSZ2D, BSZ2D);
     dim3 grid(ceil((float) local_size[0] / BSZ2D), ceil((float) local_size[1] / BSZ2D));
     ud_packing_kernel<<<grid, block>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
-        stepx, stepy, local_size);
+        stepx, stepy, local_size[0]);
     hapiCheck(cudaPeekAtLastError());
 }
 
@@ -133,7 +133,7 @@ void invoke_fb_packing_kernel(double* f, double* ghost_data, int ghost_depth, in
     dim3 block(BSZ2D, BSZ2D);
     dim3 grid(ceil((float) local_size[0] / BSZ2D), ceil((float) local_size[2] / BSZ2D));
     fb_packing_kernel<<<grid, block>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
-        stepx, stepy, local_size);
+        stepx, stepy, local_size[0]);
     hapiCheck(cudaPeekAtLastError());
 }
 
@@ -143,7 +143,7 @@ void invoke_rl_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, 
     dim3 block(BSZ2D, BSZ2D);
     dim3 grid(ceil((float) local_size[1] / BSZ2D), ceil((float) local_size[2] / BSZ2D));
     rl_unpacking_kernel<<<grid, block>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
-        stepx, stepy, local_size);
+        stepx, stepy, local_size[0]);
     hapiCheck(cudaPeekAtLastError());
 }
 
@@ -153,7 +153,7 @@ void invoke_ud_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, 
     dim3 block(BSZ2D, BSZ2D);
     dim3 grid(ceil((float) local_size[0] / BSZ2D), ceil((float) local_size[1] / BSZ2D));
     ud_unpacking_kernel<<<grid, block>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
-        stepx, stepy, local_size);
+        stepx, stepy, local_size[0]);
     hapiCheck(cudaPeekAtLastError());
 }
 
@@ -163,7 +163,7 @@ void invoke_fb_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, 
     dim3 block(BSZ2D, BSZ2D);
     dim3 grid(ceil((float) local_size[0] / BSZ2D), ceil((float) local_size[2] / BSZ2D));
     fb_unpacking_kernel<<<grid, block>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
-        stepx, stepy, local_size);
+        stepx, stepy, local_size[0]);
     hapiCheck(cudaPeekAtLastError());
 }
 
@@ -193,7 +193,7 @@ CUfunction load_kernel(size_t &hash)
     std::string fatbin_file = fmt::format("./stencil_{}.fatbin", hash);
 
     cuModuleLoadFatBinary(&cumodule, get_module(fatbin_file));
-    cuModuleGetFunction(&kernel, cumodule, COMPUTE_FUNC)
+    cuModuleGetFunction(&kernel, cumodule, COMPUTE_FUNC);
     return kernel;
 }
 
