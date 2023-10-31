@@ -14,18 +14,12 @@
 #define IDX(i, j, k, stepx, stepy) ((i) + (stepx) * (j) + (stepx) * (stepy) * (k))
 
 __global__
-void init_fields(double** fields, int num_fields, int total_size)
+void init_fields(double* f, int total_size)
 {
     int d0 = threadIdx.x + blockIdx.x * blockDim.x;
     
     if(d0 < total_size)
-    {
-        for (int i = 0; i < num_fields; i++)
-        {
-            double* f = fields[i];
-            f[d0] = 0;
-        }
-    }
+        f[d0] = 0;
 }
 
 // this is to send to the right/left
@@ -171,7 +165,8 @@ void invoke_init_fields(std::vector<double*> &fields, int total_size)
 {
     // TODO better to launch one kernel for all fields?
     int num_blocks = ceil((float) total_size / BSZ1D);
-    init_fields<<<num_blocks, BSZ1D>>>(fields.begin(), fields.size(), total_size);
+    for(int i = 0; i < fields.size(); i++)
+        init_fields<<<num_blocks, BSZ1D>>>(fields[i], total_size);
     hapiCheck(cudaPeekAtLastError());
 }
 
