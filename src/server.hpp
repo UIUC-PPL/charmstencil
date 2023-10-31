@@ -94,6 +94,7 @@ public:
          uint32_t epoch = extract<uint32_t>(cmd);
          uint32_t cmd_size = extract<uint32_t>(cmd);
          uint8_t ndims = extract<uint8_t>(cmd);
+         uint8_t ndims = extract<uint8_t>(cmd);
 #ifndef NDEBUG
         CkPrintf("%" PRIu8 ", %u, %" PRIu8 "\n", name, epoch, ndims);
 #endif
@@ -104,11 +105,12 @@ public:
 
          uint8_t odf = extract<uint8_t>(cmd);
          CProxy_Stencil st = lookup_or_create(name, ndims, dims, odf);
-         std::string new_cmd = generate_code(cmd, odf, ndims, dims);
+         std::string new_cmd = generate_code(cmd, odf, ndims, nfields, dims);
          st.receive_graph(epoch, new_cmd.size(), new_cmd.c_str());
     }
 
-    static std::string generate_code(char* msg, uint8_t odf, uint8_t ndims, uint32_t* dims)
+    static std::string generate_code(char* msg, uint8_t odf, uint8_t ndims, uint8_t nfields, 
+        uint32_t* dims)
     {
         std::string new_msg;
 
@@ -149,7 +151,7 @@ public:
             {
                 // FIXME - assuming ghost depth
                 std::vector<uint8_t> ghost_fields;
-                size_t hash = compile_compute_fun(msg, cmd_size, ndims, 
+                size_t hash = compile_compute_kernel_cuda(msg, cmd_size, ndims, nfields,
                         std::vector<uint32_t>(), local_size, num_chares, ghost_fields);
                 size_t num_ghost_fields = ghost_fields.size();
                 uint32_t new_size = sizeof(bool) + 2 * sizeof(size_t) + 
