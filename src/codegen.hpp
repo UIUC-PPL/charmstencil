@@ -125,7 +125,7 @@ size_t generate(char* cmd, uint32_t cmd_size, int ndims,
 size_t generate_cuda(char* cmd, uint32_t cmd_size, int ndims, int num_fields,
         std::vector<uint32_t> ghost_depth,
         std::vector<uint32_t> local_size, std::vector<uint32_t> num_chares,
-        std::vector<uint8_t> &ghost_fields)
+        std::vector<uint8_t> &ghost_fields);
 
 
 compute_fun_t load_compute_fun(size_t hash)
