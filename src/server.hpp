@@ -92,9 +92,9 @@ public:
          char* cmd = msg + CmiMsgHeaderSizeBytes;
          uint8_t name = extract<uint8_t>(cmd);
          uint32_t epoch = extract<uint32_t>(cmd);
+         uint8_t nfields = extract<uint8_t>(cmd);
          uint32_t cmd_size = extract<uint32_t>(cmd);
          uint8_t ndims = extract<uint8_t>(cmd);
-         uint8_t nfields = extract<uint8_t>(cmd);
 #ifndef NDEBUG
         CkPrintf("%" PRIu8 ", %u, %" PRIu8 "\n", name, epoch, ndims);
 #endif
