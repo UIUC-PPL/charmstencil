@@ -100,7 +100,7 @@ class CCSInterface(Interface):
         stencil_graph = stencil.stencil_graph
         cmd = to_bytes(stencil_graph.stencil.name, 'B')
         cmd += to_bytes(stencil_graph.epoch, 'I')
-        cmd += to_bytes(len(stencil.fields), 'B')
+        cmd += to_bytes(len(stencil._fields), 'B')
         gcmd = to_bytes(len(stencil_graph.unique_graphs) - \
                         stencil_graph.next_graph, 'B')
         for g in stencil_graph.unique_graphs[stencil_graph.next_graph:]:
