@@ -104,9 +104,10 @@ public:
         CkPrintf("%" PRIu8 ", %u, %" PRIu8 "\n", name, epoch, ndims);
 #endif
          CProxy_Stencil st = stencil_table[name];
-         StencilParams params = stencil_params[name];
-         std::string new_cmd = generate_code(cmd, params.odf, 
-            params.ndims, params.num_fields, params.dims, params.ghost_depth);
+         std::unordered_map<uint8_t, StencilParams>::iterator it = stencil_params.find(name);
+         std::string new_cmd = generate_code(cmd, it->second.odf, 
+            it->second.ndims, it->second.num_fields, it->second.dims, 
+            it->second.ghost_depth);
          st.receive_graph(epoch, new_cmd.size(), new_cmd.c_str());
     }
 
