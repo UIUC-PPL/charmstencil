@@ -18,6 +18,7 @@ class Handlers(object):
     delete_handler = b'aum_delete'
     exit_handler = b'aum_exit'
     sync_handler = b'aum_sync'
+    field_create_handler = b'aum_create_field'
 
 
 class Interface(object):
@@ -83,6 +84,26 @@ class CCSInterface(Interface):
         cmd = to_bytes(name, 'B')
         self.send_command_async(Handlers.delete_handler, cmd)
 
+    def initialize_stencil(self, stencil):
+        '''
+        stencil name
+        ndims
+        dims
+        odf
+        num_fields
+        for each field
+            ghost depth for the field
+        '''
+        cmd = to_bytes(stencil.name, 'B')
+        cmd += to_bytes(len(stencil.shape), 'B')
+        for dim in stencil.shape:
+            cmd += to_bytes(dim, 'I')
+        cmd += to_bytes(stencil.odf, 'B')
+        cmd += to_bytes(len(stencil._fields), 'B')
+        for i in range(len(stencil._fields)):
+            cmd += to_bytes(stencil._fields[i].ghost_depth)
+        self.send_command(Handlers.create_handler, cmd)
+
     def evaluate_stencil(self, stencil):
         '''
         stencil name
@@ -96,11 +117,9 @@ class CCSInterface(Interface):
         number of graph epochs
         3. array of graph index
         '''
-        from charmstencil.ast import CreateFieldNode
         stencil_graph = stencil.stencil_graph
         cmd = to_bytes(stencil_graph.stencil.name, 'B')
         cmd += to_bytes(stencil_graph.epoch, 'I')
-        cmd += to_bytes(len(stencil._fields), 'B')
         gcmd = to_bytes(len(stencil_graph.unique_graphs) - \
                         stencil_graph.next_graph, 'B')
         for g in stencil_graph.unique_graphs[stencil_graph.next_graph:]:
@@ -112,10 +131,6 @@ class CCSInterface(Interface):
         for graph in stencil_graph.graphs:
             gcmd += to_bytes(graph, 'B')
         cmd += to_bytes(len(gcmd), 'I')
-        cmd += to_bytes(len(stencil.shape), 'B')
-        for s in stencil.shape:
-            cmd += to_bytes(s, 'I')
-        cmd += to_bytes(stencil.odf, 'B')
         cmd += gcmd
         stencil_graph.next_graph = len(stencil_graph.unique_graphs)
         self.send_command_async(Handlers.operation_handler, cmd)

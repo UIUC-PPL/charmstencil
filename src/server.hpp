@@ -6,6 +6,7 @@
 
 
 std::unordered_map<uint8_t, CProxy_Stencil> stencil_table;
+std::unordered_map<uint8_t, StencilParams> stencil_params;
 std::stack<uint8_t> client_ids;
 
 
@@ -61,12 +62,16 @@ public:
     }
 
     static CProxy_Stencil lookup_or_create(uint8_t name, uint32_t ndims, uint32_t* dims, 
-            uint32_t odf)
+            uint32_t odf, uint8_t num_fields, uint32_t* ghost_depth)
     {
         CProxy_Stencil* st = lookup(name);
 
         if (st == nullptr)
-            return create_stencil(name, ndims, dims, odf);
+            CProxy_Stencil proxy = create_stencil(name, ndims, dims, odf, 
+                num_fields, ghost_depth);
+            stencil_params.emplace(name, StencilParams(
+                ndims, dims, num_fields, odf, ghost_depth));
+            return proxy;
         else
             return *st;
     }
@@ -92,25 +97,41 @@ public:
          char* cmd = msg + CmiMsgHeaderSizeBytes;
          uint8_t name = extract<uint8_t>(cmd);
          uint32_t epoch = extract<uint32_t>(cmd);
-         uint8_t nfields = extract<uint8_t>(cmd);
          uint32_t cmd_size = extract<uint32_t>(cmd);
-         uint8_t ndims = extract<uint8_t>(cmd);
 #ifndef NDEBUG
         CkPrintf("%" PRIu8 ", %u, %" PRIu8 "\n", name, epoch, ndims);
 #endif
-         uint32_t dims[ndims];
-
-         for(int i = 0; i < ndims; i++)
-             dims[i] = extract<uint32_t>(cmd);
-
-         uint8_t odf = extract<uint8_t>(cmd);
-         CProxy_Stencil st = lookup_or_create(name, ndims, dims, odf);
-         std::string new_cmd = generate_code(cmd, odf, ndims, nfields, dims);
+         CProxy_Stencil st = stencil_table[name];
+         StencilParams params = stencil_params[name];
+         std::string new_cmd = generate_code(cmd, params.odf, 
+            params.ndims, params.num_fields, params.dims, params.ghost_depth);
          st.receive_graph(epoch, new_cmd.size(), new_cmd.c_str());
     }
 
+    static void create_handler(char* msg)
+    {
+#ifndef NDEBUG
+        CkPrintf("Create handler called\n");
+#endif
+        char* cmd = msg + CmiMsgHeaderSizeBytes;
+        uint8_t name = extract<uint8_t>(cmd);
+        uint8_t ndims = extract<uint8_t>(cmd);
+        uint32_t dims[ndims];
+        for (int i = 0; i < ndims; i++)
+            dims[i] = extract<uint32_t>(cmd);
+        uint8_t odf = extract<uint8_t>(cmd);
+        uint8_t num_fields = extract<uint8_t>(cmd);
+        uint32_t ghost_depth[num_fields];
+        for (int i = 0; i < num_fields; i++)
+            ghost_depth[i] = extract<uint8_t>(cmd);
+        CProxy_Stencil st = lookup_or_create(name, ndims, dims, odf,
+            num_fields, ghost_depth);
+        uint8_t ret = 1;
+        CcsSendReply(1, (void*) &ret);
+    }
+
     static std::string generate_code(char* msg, uint8_t odf, uint8_t ndims, uint8_t nfields, 
-        uint32_t* dims)
+        uint32_t* dims, uint32_t* ghost_depth)
     {
         std::string new_msg;
 
@@ -228,7 +249,7 @@ public:
     }
 
     static CProxy_Stencil create_stencil(uint8_t name, uint32_t ndims, uint32_t* dims, 
-            uint32_t odf)
+            uint32_t odf, uint8_t num_fields, uint32_t* ghost_depth)
     {
         uint32_t num_chare_x, num_chare_y, num_chare_z;
         num_chare_x = num_chare_y = num_chare_z = 1;
@@ -255,7 +276,8 @@ public:
 #endif
 
         CProxy_Stencil new_stencil = CProxy_Stencil::ckNew(
-                name, ndims, dims, odf, num_chare_x, num_chare_y, num_chare_z);
+                name, ndims, dims, odf, num_fields,
+                ghost_depth, num_chare_x, num_chare_y, num_chare_z);
         insert(name, new_stencil);
         return new_stencil;
     }

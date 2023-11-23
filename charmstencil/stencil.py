@@ -35,6 +35,7 @@ class Field(object):
         self.stencil = stencil
         self.slice_key = kwargs.pop('slice_key', None)
         self.graph = kwargs.pop('graph', FieldOperationNode('noop', [self]))
+        self.ghost_depth = kwargs.pop('ghost_depth', 1)
         # TODO get ghost data from kwargs
 
     def __getitem__(self, key):
@@ -81,10 +82,10 @@ class Field(object):
 
 
 class Stencil(object):
-    def __init__(self, shape, *args, **kwargs):
+    def __init__(self, shape, num_fields, **kwargs):
         """Stencil base class
         """
-        self.initialize(shape, **kwargs)
+        self.initialize(shape, num_fields, **kwargs)
 
     def __del__(self):
         if self._allocated:
@@ -117,11 +118,12 @@ class Stencil(object):
     def sync(self):
         self.interface.sync_stencil(self.name)
 
-    def initialize(self, shape, **kwargs):
+    def initialize(self, shape, num_fields, **kwargs):
         self.interface = kwargs.pop('interface', DummyInterface())
         max_epochs = kwargs.pop('max_epochs', 10)
         self.odf = kwargs.pop('odf', 4)
         self.name = get_stencil_name()
+        self.num_fields = num_fields
         self.shape = shape
         self._next_field_id = 0
         self.stencil_graph = StencilGraph(self, max_epochs)
@@ -130,6 +132,9 @@ class Stencil(object):
         self._fields = []
         self._allocated = False
         self.active_graph = self.stencil_graph
+        self._fields = self._create_fields(num_fields, **kwargs)
+        self.interface.initialize_stencil(self)
+        return self._fields
 
     def get_field_name(self):
         field_name = self._next_field_id
@@ -137,7 +142,7 @@ class Stencil(object):
         return field_name
 
     @final
-    def create_field(self, **kwargs):
+    def _create_field(self, **kwargs):
         if self.active_graph != self.stencil_graph:
             raise RuntimeError("fields cannot be created in iterate or "
                                "boundary functions")
@@ -149,12 +154,16 @@ class Stencil(object):
         #raise NotImplementedError("Use create_fields()")
     
     @final
-    def create_fields(self, num_fields, **kwargs):
+    def _create_fields(self, num_fields, **kwargs):
+        ghost_depths = kwargs.pop('ghost_depths', 
+                                  [1] * num_fields)
+        fields = []
         for i in range(num_fields):
             name = self.get_field_name()
-            f = Field(name, self.shape, self, **kwargs)
-            self._fields.append(f)
-        return self._fields
+            f = Field(name, self.shape, self, 
+                      ghost_depth=ghost_depths[i])
+            fields.append(f)
+        return fields
 
     #args would be num_args and field_names right?
     @final

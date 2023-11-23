@@ -27,6 +27,7 @@ public:
         CcsRegisterHandler("aum_fetch", (CmiHandler) Server::fetch_handler);
         CcsRegisterHandler("aum_delete", (CmiHandler) Server::delete_handler);
         CcsRegisterHandler("aum_exit", (CmiHandler) Server::exit_server);
+        CcsRegisterHandler("aum_create", (CmiHandler) Server::create_handler);
     }
 };
 

@@ -94,6 +94,30 @@ public:
 };
 
 
+class StencilParams
+{
+public:
+    uint8_t ndims;
+    uint32_t dims[3];
+    uint8_t num_fields;
+    uint8_t odf;
+    uint32_t ghost_depth[3];
+
+    StencilParams(uint8_t ndims_, uint32_t* dims_, uint8_t num_fields_,
+        uint8_t odf_, uint32_t* ghost_depth)
+        :   ndims(ndims_),
+            num_fields(num_fields_),
+            odf(odf_)
+    {
+        for (int i = 0; i < ndims; i++)
+        {
+            dims[i] = dims_[i];
+            ghost_depth[i] = ghost_depth_[i];
+        }
+    }
+};
+
+
 class Stencil : public CBase_Stencil
 {
 private:
@@ -147,7 +171,8 @@ public:
     double** send_ghosts;
     double** recv_ghosts;
 
-    Stencil(uint8_t name_, uint32_t ndims_, uint32_t* dims_, uint32_t odf_)
+    Stencil(uint8_t name_, uint32_t ndims_, uint32_t* dims_, uint32_t odf_,
+        uint8_t num_fields_, uint32_t* ghost_depth_)
         : EPOCH(0)
         , name(name_)
         , ndims(ndims_)
@@ -212,7 +237,9 @@ public:
                 bounds[2 * i + 1] = true;
         }
 
-        // FIXME assuming ghost depth = 1
+        fields.resize(num_fields_);
+        ghost_depth.resize(num_fields_);
+
         for (int i = 0; i < ndims; i++)
             step[i] = bounds[2 * i] || bounds[2 * i + 1] ? local_size[i] + ghost_depth[0] :
                 local_size[i] + 2 * ghost_depth[0];
@@ -435,6 +462,30 @@ public:
     void allocate_field(double* &field, int size)
     {
         hapiCheck(cudaMalloc((void**) &field, sizeof(double) * size));
+    }
+
+    void create_fields(char* cmd)
+    {
+        uint8_t num_fields = extract<uint8_t>(cmd);
+        fields.resize(num_fields);
+        ghost_depth.resize(num_fields);
+        for (uint8_t fname = 0; fname < num_fields; fname++)
+        {
+            uint8_t depth = extract<uint8_t>(cmd);
+            uint32_t total_local_size = 1;
+#ifndef NDEBUG
+            CkPrintf("Create field %" PRIu8 " with depth %" PRIu8 "\n", fname, depth);
+#endif
+
+            for (int i = 0; i < ndims; i++)
+                total_local_size *= (local_size[i] + 
+                        (bounds[2 * i] || bounds[2 * i + 1] ? depth : 2 * depth));
+
+            allocate_field(fields[fname], total_local_size);
+            ghost_depth[fname] = (uint32_t) depth;
+            if (is_gpu)
+                invoke_init_fields(fields, total_local_size);
+        }
     }
 
     void interpret_graph(char* cmd)

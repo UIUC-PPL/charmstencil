@@ -7,10 +7,9 @@ from charmstencil.interface import DebugInterface, CCSInterface
 
 class Grid(Stencil):
     def __init__(self, n, interface):
-        self.initialize(n, interface=interface, max_epochs=1000, odf=2)
-        #self.x, self.y = self.create_fields(2, ghost_depth=1)
-        self.x = self.create_field(ghost_depth=1)
-        self.y = self.create_field(ghost_depth=1)
+        self.x, self.y = self.initialize(
+            n, interface=interface, max_epochs=1000, odf=2,
+            num_fields=2)
         #self.apply_boundary(100.)
         self.threshold = 1e-8
         self.itercount = 0
