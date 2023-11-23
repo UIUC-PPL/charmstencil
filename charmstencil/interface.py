@@ -18,7 +18,7 @@ class Handlers(object):
     delete_handler = b'aum_delete'
     exit_handler = b'aum_exit'
     sync_handler = b'aum_sync'
-    field_create_handler = b'aum_create_field'
+    create_handler = b'aum_create'
 
 
 class Interface(object):
