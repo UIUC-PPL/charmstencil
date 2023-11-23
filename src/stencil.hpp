@@ -104,7 +104,7 @@ public:
     uint32_t ghost_depth[3];
 
     StencilParams(uint8_t ndims_, uint32_t* dims_, uint8_t num_fields_,
-        uint8_t odf_, uint32_t* ghost_depth)
+        uint8_t odf_, uint32_t* ghost_depth_)
         :   ndims(ndims_),
             num_fields(num_fields_),
             odf(odf_)

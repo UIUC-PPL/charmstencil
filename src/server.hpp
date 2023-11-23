@@ -67,11 +67,13 @@ public:
         CProxy_Stencil* st = lookup(name);
 
         if (st == nullptr)
+        {
             CProxy_Stencil proxy = create_stencil(name, ndims, dims, odf, 
                 num_fields, ghost_depth);
             stencil_params.emplace(name, StencilParams(
                 ndims, dims, num_fields, odf, ghost_depth));
             return proxy;
+        }
         else
             return *st;
     }
