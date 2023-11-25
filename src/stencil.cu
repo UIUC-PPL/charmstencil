@@ -102,71 +102,71 @@ void fb_unpacking_kernel(double* f, double* ghost_data, int ghost_depth,
 
 
 void invoke_rl_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size)
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream)
 {
     dim3 block(BSZ2D, BSZ2D);
     dim3 grid(ceil((float) local_size[1] / BSZ2D), ceil((float) local_size[2] / BSZ2D));
-    rl_packing_kernel<<<grid, block>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
+    rl_packing_kernel<<<grid, block, 0, stream>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
         stepx, stepy, local_size[0]);
     hapiCheck(cudaPeekAtLastError());
 }
 
 void invoke_ud_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size)
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream)
 {
     dim3 block(BSZ2D, BSZ2D);
     dim3 grid(ceil((float) local_size[0] / BSZ2D), ceil((float) local_size[1] / BSZ2D));
-    ud_packing_kernel<<<grid, block>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
+    ud_packing_kernel<<<grid, block, 0, stream>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
         stepx, stepy, local_size[0]);
     hapiCheck(cudaPeekAtLastError());
 }
 
 void invoke_fb_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size)
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream)
 {
     dim3 block(BSZ2D, BSZ2D);
     dim3 grid(ceil((float) local_size[0] / BSZ2D), ceil((float) local_size[2] / BSZ2D));
-    fb_packing_kernel<<<grid, block>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
+    fb_packing_kernel<<<grid, block, 0, stream>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
         stepx, stepy, local_size[0]);
     hapiCheck(cudaPeekAtLastError());
 }
 
 void invoke_rl_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size)
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream)
 {
     dim3 block(BSZ2D, BSZ2D);
     dim3 grid(ceil((float) local_size[1] / BSZ2D), ceil((float) local_size[2] / BSZ2D));
-    rl_unpacking_kernel<<<grid, block>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
+    rl_unpacking_kernel<<<grid, block, 0, stream>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
         stepx, stepy, local_size[0]);
     hapiCheck(cudaPeekAtLastError());
 }
 
 void invoke_ud_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size)
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream)
 {
     dim3 block(BSZ2D, BSZ2D);
     dim3 grid(ceil((float) local_size[0] / BSZ2D), ceil((float) local_size[1] / BSZ2D));
-    ud_unpacking_kernel<<<grid, block>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
+    ud_unpacking_kernel<<<grid, block, 0, stream>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
         stepx, stepy, local_size[0]);
     hapiCheck(cudaPeekAtLastError());
 }
 
 void invoke_fb_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size)
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream)
 {
     dim3 block(BSZ2D, BSZ2D);
     dim3 grid(ceil((float) local_size[0] / BSZ2D), ceil((float) local_size[2] / BSZ2D));
-    fb_unpacking_kernel<<<grid, block>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
+    fb_unpacking_kernel<<<grid, block, 0, stream>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
         stepx, stepy, local_size[0]);
     hapiCheck(cudaPeekAtLastError());
 }
 
-void invoke_init_fields(std::vector<double*> &fields, int total_size)
+void invoke_init_fields(std::vector<double*> &fields, int total_size, cudaStream_t stream)
 {
     // TODO better to launch one kernel for all fields?
     int num_blocks = ceil((float) total_size / BSZ1D);
     for(int i = 0; i < fields.size(); i++)
-        init_fields<<<num_blocks, BSZ1D>>>(fields[i], total_size);
+        init_fields<<<num_blocks, BSZ1D, 0, stream>>>(fields[i], total_size);
     hapiCheck(cudaPeekAtLastError());
 }
 

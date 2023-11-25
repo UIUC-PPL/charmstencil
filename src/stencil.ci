@@ -18,13 +18,11 @@ module stencil
         entry Stencil(uint8_t name_, uint32_t ndims_, uint32_t dims_[ndims_], uint32_t odf_,
         uint8_t num_fields_, uint32_t ghost_depth_[ndims_]);
             
-        entry void init_recv(int dir, CkDevicePersistent p_buf);
-
         entry void receive_graph(int epoch, int size, char cmd[size]);
 
         entry void execute_graph(int epoch, int size, char cmd[size]);
 
-        entry void receive_ghost(PersistentMsg* msg);
+        entry void receive_ghost(int iter, uint8_t fname, int dir, int size, nocopydevice double data[size]);
 
         entry [reductiontarget] void start()
         {
@@ -39,21 +37,21 @@ module stencil
 
         entry [threaded] void wait(ck::future<bool> done);
 
-        // entry void iterate(uint8_t gid)
-        // {
-        //     while (num_ghost_recv < num_nbrs)
-        //     {
-        //         when receive_ghost(uint8_t fname, int dir, int size, double data[size])
-        //             serial "process_ghost" {
-        //                 process_ghost(fname, dir, size, data);
-        //                 num_ghost_recv++;
-        //             }
-        //     }
-        //     serial "done_exchange" {
-        //         num_ghost_recv = 0;
-        //         call_compute(gid);
-        //         run_next_iteration();
-        //     }
-        // };
+        entry void iterate(uint8_t gid)
+        {
+            while (num_ghost_recv < num_nbrs)
+            {
+                when receive_ghost[itercount](int iter, uint8_t fname, int dir, int size, nocopydevice double data[size])
+                    serial "process_ghost" {
+                        process_ghost(fname, dir, size, data);
+                        num_ghost_recv++;
+                    }
+            }
+            serial "done_exchange" {
+                num_ghost_recv = 0;
+                call_compute(gid);
+                run_next_iteration();
+            }
+        };
     };
 }

@@ -14,18 +14,18 @@
 
 
 extern void invoke_fb_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size);
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream);
 extern void invoke_ud_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size);
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream);
 extern void invoke_rl_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size);
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream);
 extern void invoke_fb_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size);
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream);
 extern void invoke_ud_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size);
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream);
 extern void invoke_rl_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size);
-extern void invoke_init_fields(std::vector<double*> &fields, int total_size);
+    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream);
+extern void invoke_init_fields(std::vector<double*> &fields, int total_size, cudaStream_t stream);
 extern CUfunction load_kernel(size_t &hash);
 extern void launch_kernel(void** args, uint32_t* local_size, int* block_sizes, 
     CUfunction& compute_kernel, cudaStream_t& stream);
@@ -163,13 +163,9 @@ public:
 
     cudaStream_t compute_stream;
     cudaStream_t comm_stream;
-
-    std::vector<CkDevicePersistent> p_send_bufs;
-    std::vector<CkDevicePersistent> p_recv_bufs;
-    std::vector<CkDevicePersistent> p_neighbor_bufs;
-        
-    double** send_ghosts;
-    double** recv_ghosts;
+    
+    std::vector<double*> send_ghosts;
+    std::vector<double*> recv_ghosts;
 
     Stencil(uint8_t name_, uint32_t ndims_, uint32_t* dims_, uint32_t odf_,
         uint8_t num_fields_, uint32_t* ghost_depth_)
@@ -237,18 +233,17 @@ public:
                 bounds[2 * i + 1] = true;
         }
 
-        fields.resize(num_fields_);
-        ghost_depth.resize(num_fields_);
+        create_fields(num_fields_, ghost_depth_);
 
+        // FIXME handle different ghost depths for different fields
         for (int i = 0; i < ndims; i++)
-            step[i] = bounds[2 * i] || bounds[2 * i + 1] ? local_size[i] + ghost_depth[0] :
-                local_size[i] + 2 * ghost_depth[0];
+            step[i] = local_size[i] + 2 * ghost_depth[0];
 
 
         ghost_size = ghost_depth[0] * local_size[0] * local_size[0];
 
-        send_ghosts = (double**) malloc(num_nbrs * sizeof(double*));
-        recv_ghosts = (double**) malloc(num_nbrs * sizeof(double*));
+        send_ghosts.resize(num_nbrs);
+        recv_ghosts.resize(num_nbrs);
 
         hapiCheck(cudaStreamCreateWithPriority(&compute_stream, cudaStreamDefault, 0));
         hapiCheck(cudaStreamCreateWithPriority(&comm_stream, cudaStreamDefault, -1));
@@ -258,29 +253,7 @@ public:
         {
             hapiCheck(cudaMalloc((void**)&send_ghosts[i], sizeof(double) * ghost_size));
             hapiCheck(cudaMalloc((void**)&recv_ghosts[i], sizeof(double) * ghost_size));
-        }
-
-        CkCallback recv_cb = CkCallback(CkIndex_Stencil::receive_ghost(nullptr), thisProxy[thisIndex]);
-
-        p_send_bufs.reserve(num_nbrs);
-        p_recv_bufs.reserve(num_nbrs);
-        p_neighbor_bufs.reserve(num_nbrs);
-
-        for (int i = 0; i < num_nbrs; i++)
-        {
-            p_send_bufs.emplace_back(send_ghosts[i], ghost_size, CkCallback::ignore, comm_stream);
-            p_recv_bufs.emplace_back(recv_ghosts[i], ghost_size, recv_cb, comm_stream);
-
-            // Open buffers that will be sent to neighbors
-            p_recv_bufs[i].open();
-        }
-
-        if (!bounds[LEFT]) thisProxy(index[0] - 1, index[1], index[2]).init_recv(RIGHT, p_recv_bufs[LEFT]);
-        if (!bounds[RIGHT]) thisProxy(index[0] + 1, index[1], index[2]).init_recv(LEFT, p_recv_bufs[RIGHT]);
-        if (!bounds[FRONT]) thisProxy(index[0], index[1] - 1, index[2]).init_recv(BACK, p_recv_bufs[FRONT]);
-        if (!bounds[BACK]) thisProxy(index[0], index[1] + 1, index[2]).init_recv(FRONT, p_recv_bufs[BACK]);
-        if (!bounds[DOWN]) thisProxy(index[0], index[1], index[2] - 1).init_recv(UP, p_recv_bufs[DOWN]);
-        if (!bounds[UP]) thisProxy(index[0], index[1], index[2] + 1).init_recv(DOWN, p_recv_bufs[UP]);    
+        }  
     }
 
     Stencil(CkMigrateMessage* m) {}
@@ -293,15 +266,8 @@ public:
             hapiCheck(cudaFree(send_ghosts[i]));
             hapiCheck(cudaFree(recv_ghosts[i]));
         }
-        free(send_ghosts);
-        free(recv_ghosts);
-    }
-
-    void init_recv(int dir, CkDevicePersistent p_buf)
-    {
-        p_neighbor_bufs[dir] = p_buf;
-        if (init_count++ == num_nbrs)
-            contribute(CkCallback(CkReductionTarget(Stencil, start), thisProxy));
+        //free(send_ghosts);
+        //free(recv_ghosts);
     }
 
     void delete_cache()
@@ -343,6 +309,7 @@ public:
         num_iters = extract<uint32_t>(cmd);
         itercmd = cmd;
         run_next_iteration();
+        //thisProxy[thisIndex].iterate();
     }
 
     void run_next_iteration()
@@ -353,7 +320,7 @@ public:
             if(thisIndex.x == 0 && thisIndex.y == 0 && thisIndex.z == 0)
                 CkPrintf("Running iteration %u\n", itercount);
 #endif
-            if (itercount == 3)
+            if (itercount == 1)
             {
                 double start_time = CkTimer();
                 CkCallback cb(CkReductionTarget(CodeGenCache, start_time), codegen_proxy[0]);
@@ -374,9 +341,8 @@ public:
                 for (int i = 0; i < num_ghost_fields; i++)
                     fnames.push_back(extract<uint8_t>(graph));
                 send_ghost_data(fnames);
+                thisProxy(thisIndex.x, thisIndex.y, thisIndex.z).iterate(curr_gid);
             }
-            else
-                interpret_graph(graph);
         }
         else
         {
@@ -459,92 +425,31 @@ public:
 #endif
     }
 
-    void allocate_field(double* &field, int size)
+    inline void allocate_field(double* &field, int size)
     {
         hapiCheck(cudaMalloc((void**) &field, sizeof(double) * size));
     }
 
-    void create_fields(char* cmd)
+    void create_fields(int num_fields, uint32_t* ghost_depth_)
     {
-        uint8_t num_fields = extract<uint8_t>(cmd);
         fields.resize(num_fields);
         ghost_depth.resize(num_fields);
         for (uint8_t fname = 0; fname < num_fields; fname++)
         {
-            uint8_t depth = extract<uint8_t>(cmd);
+            uint32_t depth = ghost_depth_[fname];
             uint32_t total_local_size = 1;
 #ifndef NDEBUG
             CkPrintf("Create field %" PRIu8 " with depth %" PRIu8 "\n", fname, depth);
 #endif
 
             for (int i = 0; i < ndims; i++)
-                total_local_size *= (local_size[i] + 
-                        (bounds[2 * i] || bounds[2 * i + 1] ? depth : 2 * depth));
+                total_local_size *= (local_size[i] + 2 * depth);
 
             allocate_field(fields[fname], total_local_size);
-            ghost_depth[fname] = (uint32_t) depth;
+            ghost_depth[fname] = depth;
             if (is_gpu)
-                invoke_init_fields(fields, total_local_size);
+                invoke_init_fields(fields, total_local_size, compute_stream);
         }
-    }
-
-    void interpret_graph(char* cmd)
-    {
-        //OperandType operand_type = lookup_type(extract<uint8_t>(cmd));
-        Operation oper = lookup_operation(extract<uint8_t>(cmd));
-
-        switch (oper)
-        {
-            case Operation::create:
-            {
-                uint8_t fname = extract<uint8_t>(cmd);
-                uint8_t depth = extract<uint8_t>(cmd);
-                uint32_t total_local_size = 1;
-#ifndef NDEBUG
-                CkPrintf("Create field %" PRIu8 " with depth %" PRIu8 "\n", fname, depth);
-#endif
-                if (fname >= fields.size())
-                {
-                    fields.resize(fname + 1);
-                    ghost_depth.resize(fname + 1);
-                }
-
-                for (int i = 0; i < ndims; i++)
-                    total_local_size *= (local_size[i] + 
-                            (bounds[2 * i] || bounds[2 * i + 1] ? depth : 2 * depth));
-
-                allocate_field(fields[fname], total_local_size);
-                ghost_depth[fname] = (uint32_t) depth;
-                if (is_gpu)
-                    invoke_init_fields(fields, total_local_size);
-            }
-        }
-
-        run_next_iteration();
-    }
-
-    void populate_ghosts(double* f, int start_x, int stop_x, int start_y, int stop_y,
-            int start_z, int stop_z, double* ghost_data, bool print = false)
-    {
-        int idx = 0;
-        for (int z = start_z; z < stop_z; z++)
-            for (int y = start_y; y < stop_y; y++)
-                for (int x = start_x; x < stop_x; x++)
-                {
-                    ghost_data[idx++] = f[x + step[0] * y + step[0] * step[1] * z];
-                    //if (print && thisIndex.x == 0 && thisIndex.y == 1 && thisIndex.z == 1)
-                    //{
-                    //    CkPrintf("Coordinate = (%i, %i, %i), Flat = %i\n", x, y, z, x + step[0] * y + step[0] * step[1] * z);
-                    //}
-                }
-    }
-
-    void send_persistent(int fname, int dir, int rev_dir)
-    {
-        PersistentMsg* msg = new PersistentMsg(rev_dir, fname);
-        p_neighbor_bufs[dir].set_msg(msg);
-        //p_neighbor_bufs[dir].cb.setRefNum(my_iter);
-        p_send_bufs[dir].put(p_neighbor_bufs[dir]);
     }
 
     // FIXME doesn't do diagonal neighbors
@@ -568,75 +473,81 @@ public:
                 // down
                 if (!bounds[DOWN])
                 {
-                    start_x = bounds[LEFT] ? 0 : 1;
-                    start_y = bounds[FRONT] == 0 ? 0 : 1;
+                    start_x = 1;
+                    start_y = 1;
                     start_z = 1;
                     stop_x = start_x + local_size[0];
                     stop_y = start_y + local_size[1];
                     stop_z = start_z + 1;
                     invoke_ud_packing_kernel(f, send_ghosts[DOWN], depth, start_x,
-                        start_y, start_z, step[0], step[1], local_size);
-                    send_persistent(fname, DOWN, UP);
+                        start_y, start_z, step[0], step[1], local_size, compute_stream);
+                    thisProxy(thisIndex.x, thisIndex.y, thisIndex.z - 1).receive_ghost(
+                        itercount, fname, UP, ghost_size, CkDeviceBuffer(send_ghosts[DOWN], comm_stream));
                 }
                 if (!bounds[UP])
                 {
-                    start_x = bounds[LEFT] ? 0 : 1;
-                    start_y = bounds[FRONT] ? 0 : 1;
-                    start_z = bounds[DOWN] ? local_size[2] - 1 : local_size[2];
+                    start_x = 1;
+                    start_y = 1;
+                    start_z = local_size[2];
                     stop_x = start_x + local_size[0];
                     stop_y = start_y + local_size[1];
                     stop_z = start_z + 1;
                     invoke_ud_packing_kernel(f, send_ghosts[UP], depth, start_x,
-                        start_y, start_z, step[0], step[1], local_size);
-                    send_persistent(fname, UP, DOWN);
+                        start_y, start_z, step[0], step[1], local_size, compute_stream);
+                    thisProxy(thisIndex.x, thisIndex.y, thisIndex.z + 1).receive_ghost(
+                        itercount, fname, UP, ghost_size, CkDeviceBuffer(send_ghosts[UP], comm_stream));
                 }
                 if (!bounds[LEFT])
                 {
                     start_x = 1;
-                    start_y = bounds[FRONT] ? 0 : 1;
-                    start_z = bounds[DOWN] ? 0 : 1;
+                    start_y = 1;
+                    start_z = 1;
                     stop_x = start_x + 1;
                     stop_y = start_y + local_size[1];
                     stop_z = start_z + local_size[2];
                     invoke_rl_packing_kernel(f, send_ghosts[LEFT], depth, start_x,
-                        start_y, start_z, step[0], step[1], local_size);
-                    send_persistent(fname, LEFT, RIGHT);
+                        start_y, start_z, step[0], step[1], local_size, compute_stream);
+                    thisProxy(thisIndex.x, thisIndex.y - 1, thisIndex.z).receive_ghost(
+                        itercount, fname, UP, ghost_size, CkDeviceBuffer(send_ghosts[LEFT], comm_stream));
                 }
                 if (!bounds[RIGHT])
                 {
-                    start_x = bounds[LEFT] ? local_size[0] - 1 : local_size[0];
-                    start_y = bounds[FRONT] ? 0 : 1;
-                    start_z = bounds[DOWN] ? 0 : 1;
+                    start_x = local_size[0];
+                    start_y = 1;
+                    start_z = 1;
                     stop_x = start_x + 1;
                     stop_y = start_y + local_size[1];
                     stop_z = start_z + local_size[2];
                     invoke_rl_packing_kernel(f, send_ghosts[RIGHT], depth, start_x,
-                        start_y, start_z, step[0], step[1], local_size);
-                    send_persistent(fname, RIGHT, LEFT);
+                        start_y, start_z, step[0], step[1], local_size, compute_stream);
+                    thisProxy(thisIndex.x, thisIndex.y + 1, thisIndex.z).receive_ghost(
+                        itercount, fname, UP, ghost_size, CkDeviceBuffer(send_ghosts[RIGHT], comm_stream));
                 }
                 if (!bounds[FRONT])
                 {
-                    start_x = bounds[LEFT] ? 0 : 1;
+                    start_x = 1;
                     start_y = 1;
-                    start_z = bounds[DOWN] ? 0 : 1;
+                    start_z = 1;
                     stop_x = start_x + local_size[0];
                     stop_y = start_y + 1;
                     stop_z = start_z + local_size[2];
                     invoke_fb_packing_kernel(f, send_ghosts[FRONT], depth, start_x,
-                        start_y, start_z, step[0], step[1], local_size);
-                    send_persistent(fname, FRONT, BACK);
+                        start_y, start_z, step[0], step[1], local_size, compute_stream);
+                    thisProxy(thisIndex.x + 1, thisIndex.y, thisIndex.z).receive_ghost(
+                        itercount, fname, UP, ghost_size, CkDeviceBuffer(send_ghosts[FRONT], comm_stream));
                 }
                 if (!bounds[BACK])
                 {
-                    start_x = bounds[LEFT] ? 0 : 1;
-                    start_y = bounds[FRONT] ? local_size[1] - 1 : local_size[1];
-                    start_z = bounds[DOWN] ? 0 : 1;
+                    start_x = 1;
+                    start_y = local_size[1];
+                    start_z = 1;
                     stop_x = start_x + local_size[0];
                     stop_y = start_y + 1;
                     stop_z = start_z + local_size[2];
                     invoke_fb_packing_kernel(f, send_ghosts[BACK], depth, start_x,
-                        start_y, start_z, step[0], step[1], local_size);
-                    send_persistent(fname, BACK, FRONT);
+                        start_y, start_z, step[0], step[1], local_size, compute_stream);
+                    thisProxy(thisIndex.x - 1, thisIndex.y, thisIndex.z).receive_ghost(
+                        itercount, fname, UP, ghost_size, CkDeviceBuffer(send_ghosts[BACK], comm_stream));
                 }
             }
             else
@@ -644,86 +555,80 @@ public:
                 CkAbort("Not implemented");
             }
         }
-        
-
-        //CkPrintf("Time for sending ghosts = %f\n", CkTimer() - ghost_start);
-
-        sent_ghosts = true;
-        if (num_ghost_recv == num_nbrs)
-        {
-            num_ghost_recv = 0;
-            sent_ghosts = false;
-            call_compute(curr_gid);
-            run_next_iteration();
-        }
     }
     
+    void receive_ghost(int iter, uint8_t fname, int dir, int &size, double* &data, CkDeviceBufferPost *devicePost)
+    {
+        data = recv_ghosts[dir];
+        devicePost[0].cuda_stream = comm_stream;
+    }
+
     // TODO implement multiple fields in same message
-    void receive_ghost(PersistentMsg* msg)
+    void process_ghost(uint8_t fname, int dir, int size, double* data)
     {
         //CkPrintf("Processing ghost at (%i, %i, %i) from %i\n", thisIndex.x, 
         //        thisIndex.y, thisIndex.z, dir);
         double start_recv = CkTimer();
         int startx, starty, startz;
-        double* recv_ghost = recv_ghosts[msg->dir];
-        double* f = fields[msg->fname];
-        int depth = ghost_depth[msg->fname];
+        double* recv_ghost = recv_ghosts[dir];
+        double* f = fields[fname];
+        int depth = ghost_depth[fname];
         if (ndims == 3)
         {
-            switch (msg->dir)
+            switch (dir)
             {
                 case DOWN:
                 {
-                    startx = bounds[LEFT] ? 0 : 1;
-                    starty = bounds[FRONT] ? 0 : 1;
+                    startx = 1;
+                    starty = 1;
                     startz = 0;
                     invoke_ud_unpacking_kernel(f, recv_ghost, depth, 
-                        startx, starty, startz, step[0], step[1], local_size);
+                        startx, starty, startz, step[0], step[1], local_size, compute_stream);
                     break;
                 }
                 case UP:
                 {
-                    start_x = bounds[LEFT] ? 0 : 1;
-                    start_y = bounds[FRONT] ? 0 : 1;
-                    start_z = bounds[DOWN] ? local_size[2] : local_size[2] + 1;
+                    start_x = 1;
+                    start_y = 1;
+                    start_z = local_size[2] + 1;
                     invoke_ud_unpacking_kernel(f, recv_ghost, depth, 
-                        startx, starty, startz, step[0], step[1], local_size);
+                        startx, starty, startz, step[0], step[1], local_size, compute_stream);
                     break;
                 }
                 case LEFT:
                 {
-                    startx = 0;
-                    starty = bounds[FRONT] ? 0 : 1;
-                    startz = bounds[DOWN] ? 0 : 1;
+                    startx = 1;
+                    starty = 0;
+                    startz = 1;
                     invoke_rl_unpacking_kernel(f, recv_ghost, depth, 
-                        startx, starty, startz, step[0], step[1], local_size);
+                        startx, starty, startz, step[0], step[1], local_size, compute_stream);
                     break;
                 }
                 case RIGHT:
                 {
-                    startx = bounds[LEFT] ? local_size[0] : local_size[0] + 1;
-                    starty = bounds[FRONT] ? 0 : 1;
-                    startz = bounds[DOWN] ? 0 : 1;
+                    startx = 1;
+                    starty = local_size[0] + 1;
+                    startz = 1;
                     invoke_rl_unpacking_kernel(f, recv_ghost, depth, 
-                        startx, starty, startz, step[0], step[1], local_size);
+                        startx, starty, startz, step[0], step[1], local_size, compute_stream);
                     break;
                 }
                 case FRONT:
                 {
-                    startx = bounds[LEFT] ? 0 : 1;
-                    starty = 0;
-                    startz = bounds[DOWN] ? 0 : 1;
+                    startx = local_size[1] + 1;
+                    starty = 1;
+                    startz = 1;
                     invoke_fb_unpacking_kernel(f, recv_ghost, depth, 
-                        startx, starty, startz, step[0], step[1], local_size);
+                        startx, starty, startz, step[0], step[1], local_size, compute_stream);
                     break;
                 }
                 case BACK:
                 {
-                    startx = bounds[LEFT] ? 0 : 1;
-                    starty = bounds[FRONT] ? local_size[1] : local_size[1] + 1;
-                    startz = bounds[DOWN] ? 0 : 1;
+                    startx = 0;
+                    starty = 1;
+                    startz = 1;
                     invoke_fb_unpacking_kernel(f, recv_ghost, depth, 
-                        startx, starty, startz, step[0], step[1], local_size);
+                        startx, starty, startz, step[0], step[1], local_size, compute_stream);
                     break;
                 }
             }
@@ -734,17 +639,6 @@ public:
         }
 
         recv_ghost_time += CkTimer() - start_recv;
-
-        delete msg;
-
-        if (++num_ghost_recv == num_nbrs && sent_ghosts)
-        {
-            num_ghost_recv = 0;
-            sent_ghosts = false;
-            //CkPrintf("Total recv time = %f\n", recv_ghost_time);
-            call_compute(curr_gid);
-            run_next_iteration();
-        }
     }
 };
 
