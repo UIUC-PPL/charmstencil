@@ -126,7 +126,7 @@ public:
         uint8_t num_fields = extract<uint8_t>(cmd);
         uint32_t ghost_depth[num_fields];
         for (int i = 0; i < num_fields; i++)
-            ghost_depth[i] = extract<uint8_t>(cmd);
+            ghost_depth[i] = extract<uint32_t>(cmd);
         CProxy_Stencil st = lookup_or_create(name, ndims, dims, odf,
             num_fields, ghost_depth);
         uint8_t ret = 1;
