@@ -1,10 +1,10 @@
-CHARMDIR=/home/sb56/charm/
+CHARMDIR=/u/bhosale/charm/
 CHARMC=$(CHARMDIR)/mpi-linux-x86_64-cuda/bin/charmc
 CHARM_INC=-I$(CHARMDIR)/include
 NVCC=nvcc
-NVCC_FLAGS=-c -std=c++17  -use_fast_math -O3 -I/home/sb56/fmt/include -L/home/sb56/anaconda3/envs/charm/lib/
-OPTS=-c++-option -std=c++17 -O3 -g -ldl -I/home/sb56/fmt/include -DNDEBUG
-LD_LIBS=-lcuda -L/home/sb56/anaconda3/envs/charm/lib/
+NVCC_FLAGS=-c -std=c++17  -use_fast_math -O3 -I/u/bhosale/fmt/include 
+OPTS=-c++-option -std=c++17 -O3 -g -ldl -I/u/bhosale/fmt/include -DNDEBUG
+LD_LIBS=-lcuda
 
 all: server.out
 

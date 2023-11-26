@@ -25,7 +25,7 @@ extern void invoke_ud_packing_kernel(double* f, double* ghost_data, int ghost_de
     int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream);
 extern void invoke_rl_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
     int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream);
-extern void invoke_init_fields(std::vector<double*> &fields, int total_size, cudaStream_t stream);
+extern void invoke_init_fields(double** fields, uint8_t num_fields, uint32_t total_size, cudaStream_t stream);
 extern CUfunction load_kernel(size_t &hash);
 extern void launch_kernel(void** args, uint32_t* local_size, int* block_sizes, 
     CUfunction& compute_kernel, cudaStream_t& stream);
@@ -83,17 +83,6 @@ public:
     }
 };
 
-
-class PersistentMsg : public CMessage_PersistentMsg 
-{
-public:
-  int dir;
-  int fname;
-
-  PersistentMsg(int dir_, int fname_) : dir(dir_), fname(fname_) {}
-};
-
-
 class StencilParams
 {
 public:
@@ -131,7 +120,7 @@ private:
     std::vector<uint32_t> graph_size;
     std::vector<ck::future<bool>> futures;
     std::unordered_map<size_t, compute_fun_t> fun_cache;
-    int ghost_size;
+    uint32_t ghost_size;
 
     double comp_time;
     double recv_ghost_time;
@@ -142,13 +131,15 @@ public:
     
     // expects that the number of dimensions and length in each 
     // dimension will be specified at the time of creation
+    uint8_t num_fields;
     uint32_t ndims;
     uint32_t odf; 
     int num_nbrs;
     int num_ghost_recv;
     bool is_gpu;
     
-    std::vector<double*> fields;
+    double** fields;
+    //std::vector<double*> fields;
     std::vector<uint32_t> ghost_depth;  // stores the depth of the ghosts corresponding to each field
 
     uint32_t local_size[3];
@@ -164,8 +155,8 @@ public:
     cudaStream_t compute_stream;
     cudaStream_t comm_stream;
     
-    std::vector<double*> send_ghosts;
-    std::vector<double*> recv_ghosts;
+    double* send_ghosts[27];
+    double* recv_ghosts[27];
 
     Stencil(uint8_t name_, uint32_t ndims_, uint32_t* dims_, uint32_t odf_,
         uint8_t num_fields_, uint32_t* ghost_depth_)
@@ -239,11 +230,13 @@ public:
         for (int i = 0; i < ndims; i++)
             step[i] = local_size[i] + 2 * ghost_depth[0];
 
-
+        
+        // FIXME fix non cube decompositions
         ghost_size = ghost_depth[0] * local_size[0] * local_size[0];
+        CkPrintf("Ghost size = %u\n", ghost_size);
 
-        send_ghosts.resize(num_nbrs);
-        recv_ghosts.resize(num_nbrs);
+        //send_ghosts.resize(num_nbrs);
+        //recv_ghosts.resize(num_nbrs);
 
         hapiCheck(cudaStreamCreateWithPriority(&compute_stream, cudaStreamDefault, 0));
         hapiCheck(cudaStreamCreateWithPriority(&comm_stream, cudaStreamDefault, -1));
@@ -406,13 +399,12 @@ public:
             // TODO don't hardcode this
             int block_sizes[3] = {8, 8, 8};
             //double** fields_ptr = fields.begin();
-            int nfields = fields.size();
-            void* args[nfields + 3];
-            for(int i = 0; i < nfields; i++)
+            void* args[num_fields + 3];
+            for(int i = 0; i < num_fields; i++)
                 args[i] = &fields[i];
-            args[nfields] = &num_chares;
-            args[nfields + 1] = &index;
-            args[nfields + 2] = &local_size;
+            args[num_fields] = &num_chares;
+            args[num_fields + 1] = &index;
+            args[num_fields + 2] = &local_size;
             double start_comp = CkTimer();
             launch_kernel(args, local_size, block_sizes, compute_f, compute_stream);
             //compute_f(fields, num_chares, index, local_size);
@@ -425,14 +417,11 @@ public:
 #endif
     }
 
-    inline void allocate_field(double* &field, int size)
+    void create_fields(uint8_t num_fields_, uint32_t* ghost_depth_)
     {
-        hapiCheck(cudaMalloc((void**) &field, sizeof(double) * size));
-    }
-
-    void create_fields(int num_fields, uint32_t* ghost_depth_)
-    {
-        fields.resize(num_fields);
+        num_fields = num_fields_;
+        //fields.resize(num_fields);
+        fields = (double**) malloc(sizeof(double*) * num_fields);
         ghost_depth.resize(num_fields);
         for (uint8_t fname = 0; fname < num_fields; fname++)
         {
@@ -445,10 +434,10 @@ public:
             for (int i = 0; i < ndims; i++)
                 total_local_size *= (local_size[i] + 2 * depth);
 
-            allocate_field(fields[fname], total_local_size);
+            hapiCheck(cudaMalloc((void**) &(fields[fname]), sizeof(double) * total_local_size));
             ghost_depth[fname] = depth;
             if (is_gpu)
-                invoke_init_fields(fields, total_local_size, compute_stream);
+                invoke_init_fields(fields, num_fields, total_local_size, compute_stream);
         }
     }
 

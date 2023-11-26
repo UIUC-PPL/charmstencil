@@ -113,6 +113,11 @@ void generate_code(FILE* genfile, char* &cmd, int ndims, std::vector<uint32_t> g
         std::vector<uint32_t> local_size, std::vector<uint32_t> num_chares,
         std::vector<uint8_t> &ghost_fields);
 
+void generate_code_cuda(FILE* genfile, char* &cmd, int ndims, 
+        std::vector<uint32_t> ghost_depth,
+        std::vector<uint32_t> local_size, 
+        std::vector<uint32_t> num_chares,
+        std::vector<uint8_t> &ghost_fields);
 
 void generate_headers(FILE* genfile);
 
@@ -177,7 +182,7 @@ size_t compile_compute_kernel_cuda(char* cmd, uint32_t cmd_size, int ndims,
 
     // compile filename
     std::string compile_cmd = fmt::format(
-            "nvcc -std=c++11 -arch sm_60 {}.cu -o {}.fatbin -I$STENCIL_PATH -O3 -g --fatbin -lcuda", 
+            "nvcc -std=c++11 -arch sm_60 {}.cu -o {}.fatbin -I$STENCIL_PATH -I$CHARM_PATH -O3 -g --fatbin -lcuda", 
             filename, filename);
 
     system(compile_cmd.c_str());
@@ -232,6 +237,7 @@ size_t generate_cuda(char* cmd, uint32_t cmd_size, int ndims, int num_fields,
 
     // make string of all fields as arguments
     std::string fields_args = "";
+    std::string tmp;
     for (int i = 0; i < num_fields; i++)
     {
         fields_args += fmt::format("double* f{}, ", i);
@@ -241,13 +247,13 @@ size_t generate_cuda(char* cmd, uint32_t cmd_size, int ndims, int num_fields,
     FILE* genfile = fopen((filename + ".cu").c_str(), "w");
     fprintf(genfile, "#include <iostream>\n");
     fprintf(genfile, "#include \"hapi.h\"\n");
-    fprintf(genfile, "__global__ void compute_func(%s "
-            "uint32_t* num_chares, int* index, uint32_t* local_size) {\n", fields_args);
+    fprintf(genfile, "__global__ void compute_func(%s"
+            "uint32_t* num_chares, int* index, uint32_t* local_size) {\n", fields_args.c_str());
 
     // Add some prints for debugging
     //fprintf(genfile, "std::cout << \"Generated function called\\n\";\n");
 
-    generate_code(genfile, cmd, ndims, ghost_depth, local_size, num_chares, ghost_fields);
+    generate_code_cuda(genfile, cmd, ndims, ghost_depth, local_size, num_chares, ghost_fields);
     fprintf(genfile, "}\n");
     fclose(genfile);
     return graph_hash;
@@ -381,7 +387,7 @@ void generate_code_cuda(FILE* genfile, char* &cmd, int ndims,
             char dims[3] = {'x', 'y', 'z'};
 
             for(int i = 0; i < ndims; i++)
-                fprintf(genfile, "int d%i = threadIdx.%c + blockDim.%c * blockIdx.%c;", 
+                fprintf(genfile, "int d%i = threadIdx.%c + blockDim.%c * blockIdx.%c;\n", 
                     i, dims[i], dims[i], dims[i]);
 
             // calculate stop index
@@ -409,13 +415,13 @@ void generate_code_cuda(FILE* genfile, char* &cmd, int ndims,
 
             // check for bounds
             if (ndims == 1)
-                fprintf(genfile, "if(d0 * %i >= stop_idx[0])\n",
+                fprintf(genfile, "if(d0 * %i >= stop_idx[0]) ",
                     key.index[0].step);
             if (ndims == 2)
-                fprintf(genfile, "if(d0 * %i >= stop_idx[0] || d1 * %i >= stop_idx[1])\n",
+                fprintf(genfile, "if(d0 * %i >= stop_idx[0] || d1 * %i >= stop_idx[1]) ",
                     key.index[0].step, key.index[1].step);
             if (ndims == 3)
-                fprintf(genfile, "if(d0 * %i >= stop_idx[0] || d1 * %i >= stop_idx[1] || d2 * %i >= stop_idx[2])\n",
+                fprintf(genfile, "if(d0 * %i >= stop_idx[0] || d1 * %i >= stop_idx[1] || d2 * %i >= stop_idx[2]) ",
                     key.index[0].step, key.index[1].step, key.index[2].step);
             fprintf(genfile, "return;\n");
 
@@ -437,9 +443,6 @@ void generate_code_cuda(FILE* genfile, char* &cmd, int ndims,
             fprintf(genfile, "f%i[%s] = %s;\n", fname, index_str.c_str(), 
                     generate_loop_rhs(genfile, cmd, ndims, depth, local_size, num_chares).c_str());
 
-            for (int i = 0; i < ndims; i++)
-                fprintf(genfile, "}\n");
-
             //fprintf(genfile, "std::cout << \"Loop iterations = \" << count << std::endl;\n");
             break;
         }
@@ -454,7 +457,7 @@ void generate_code_cuda(FILE* genfile, char* &cmd, int ndims,
                 uint8_t fname = extract<uint8_t>(cmd);
                 ghost_fields.push_back(fname);
             }
-            generate_code(genfile, cmd, ndims, ghost_depth, local_size, num_chares, ghost_fields);
+            generate_code_cuda(genfile, cmd, ndims, ghost_depth, local_size, num_chares, ghost_fields);
             break;
         }
         default:
@@ -538,7 +541,7 @@ std::string generate_loop_rhs(FILE* genfile, char* &cmd, int ndims, uint32_t dep
                         key.index[1].start, key.index[1].step,
                         key.index[0].start, key.index[0].step);
 
-            std::string result_str = fmt::format("({}).data[{}]", f_str, index_str);
+            std::string result_str = fmt::format("({})[{}]", f_str, index_str);
 
             return result_str;
         }

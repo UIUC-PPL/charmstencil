@@ -2,8 +2,6 @@ module stencil
 {
     readonly CProxy_CodeGenCache codegen_proxy;
 
-    message PersistentMsg;
-
     nodegroup CodeGenCache
     {
         entry CodeGenCache();

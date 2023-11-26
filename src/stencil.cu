@@ -161,13 +161,16 @@ void invoke_fb_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, 
     hapiCheck(cudaPeekAtLastError());
 }
 
-void invoke_init_fields(std::vector<double*> &fields, int total_size, cudaStream_t stream)
+void invoke_init_fields(double** fields, uint8_t num_fields, uint32_t total_size, cudaStream_t stream)
 {
     // TODO better to launch one kernel for all fields?
+    printf("total size = %u\n", total_size);
     int num_blocks = ceil((float) total_size / BSZ1D);
-    for(int i = 0; i < fields.size(); i++)
+    for(int i = 0; i < num_fields; i++)
+    {
         init_fields<<<num_blocks, BSZ1D, 0, stream>>>(fields[i], total_size);
-    hapiCheck(cudaPeekAtLastError());
+        hapiCheck(cudaPeekAtLastError());
+    }
 }
 
 void* get_module(std::string &fatbin_file)
