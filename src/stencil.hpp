@@ -5,6 +5,19 @@
 #include "stencil.decl.h"
 
 
+#define CHECK(expression)                                    \
+  {                                                          \
+    CUresult status = (expression);                          \
+    if (status != CUDA_SUCCESS) {                            \
+      const char* err_str;                                   \
+      cuGetErrorString(status, &err_str);                    \
+      std::cerr << "Error on line " << __LINE__ << ": "      \
+                << err_str << std::endl;                     \
+      std::exit(EXIT_FAILURE);                               \
+    }                                                        \
+  }
+
+
 #define LEFT 0
 #define RIGHT 1
 #define FRONT 2
@@ -171,6 +184,7 @@ public:
         , sent_ghosts(false)
         , recv_ghost_time(0)
         , is_gpu(true)
+        , itercount(0)
         , init_count(0)
     {
         index[0] = thisIndex.x;
@@ -238,6 +252,13 @@ public:
         //send_ghosts.resize(num_nbrs);
         //recv_ghosts.resize(num_nbrs);
 
+        CUdevice cuDevice;
+        CUcontext cuContext;
+        hapiCheck(cudaFree(0));
+        //CHECK(cuDeviceGet(&cuDevice, 0)); 
+        //CHECK(cuCtxCreate(&cuContext, 0, cuDevice));
+        //CHECK(cuCtxGetCurrent(&context));
+
         hapiCheck(cudaStreamCreateWithPriority(&compute_stream, cudaStreamDefault, 0));
         hapiCheck(cudaStreamCreateWithPriority(&comm_stream, cudaStreamDefault, -1));
         
@@ -246,7 +267,9 @@ public:
         {
             hapiCheck(cudaMalloc((void**)&send_ghosts[i], sizeof(double) * ghost_size));
             hapiCheck(cudaMalloc((void**)&recv_ghosts[i], sizeof(double) * ghost_size));
-        }  
+        }
+
+        thisProxy(thisIndex.x, thisIndex.y, thisIndex.z).start();
     }
 
     Stencil(CkMigrateMessage* m) {}
@@ -307,6 +330,8 @@ public:
 
     void run_next_iteration()
     {
+        CkPrintf("Iterating %u, %u\n", itercount, num_iters);
+
         if (itercount++ < num_iters)
         {
 #ifndef NDEBUG
@@ -368,6 +393,7 @@ public:
         uint32_t cmd_size = graph_size[gid];
 
         bool gen = extract<bool>(graph);
+        CkPrintf("Gen = %d\n", gen);
          
         if (gen)
         {
@@ -399,12 +425,15 @@ public:
             // TODO don't hardcode this
             int block_sizes[3] = {8, 8, 8};
             //double** fields_ptr = fields.begin();
-            void* args[num_fields + 3];
-            for(int i = 0; i < num_fields; i++)
+            void* args[num_fields + 3 * ndims];
+            for (int i = 0; i < num_fields; i++)
                 args[i] = &fields[i];
-            args[num_fields] = &num_chares;
-            args[num_fields + 1] = &index;
-            args[num_fields + 2] = &local_size;
+            for (int i = 0; i < ndims; i++)
+                args[num_fields + i] = &num_chares[i];
+            for (int i = 0; i < ndims; i++)            
+                args[num_fields + ndims + i] = &index[i];
+            for (int i = 0; i < ndims; i++)
+                args[num_fields + 2 * ndims + i] = &local_size[i];
             double start_comp = CkTimer();
             launch_kernel(args, local_size, block_sizes, compute_f, compute_stream);
             //compute_f(fields, num_chares, index, local_size);

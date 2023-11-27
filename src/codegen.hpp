@@ -237,18 +237,29 @@ size_t generate_cuda(char* cmd, uint32_t cmd_size, int ndims, int num_fields,
 
     // make string of all fields as arguments
     std::string fields_args = "";
-    std::string tmp;
+    std::string num_chares_args = "";
+    std::string index_args = "";
+    std::string local_size_args = "";
+
     for (int i = 0; i < num_fields; i++)
-    {
         fields_args += fmt::format("double* f{}, ", i);
+
+    for (int i = 0; i < ndims; i++)
+    {
+        num_chares_args += fmt::format("uint32_t nchares{}, ", i);
+        index_args += fmt::format("int idx{}, ", i);
+        local_size_args += fmt::format("uint32_t lsz{}", i);
+        if (i < ndims - 1)
+            local_size_args += ", ";
     }
+
+    std::string args = fields_args + num_chares_args + index_args + local_size_args;
 
     std::string filename = fmt::format("stencil_{}", graph_hash);
     FILE* genfile = fopen((filename + ".cu").c_str(), "w");
     fprintf(genfile, "#include <iostream>\n");
-    fprintf(genfile, "#include \"hapi.h\"\n");
-    fprintf(genfile, "__global__ void compute_func(%s"
-            "uint32_t* num_chares, int* index, uint32_t* local_size) {\n", fields_args.c_str());
+    fprintf(genfile, "#include \"hapi.h\"\n\n");
+    fprintf(genfile, "__global__ void compute_func(%s) {\n\t", args.c_str());
 
     // Add some prints for debugging
     //fprintf(genfile, "std::cout << \"Generated function called\\n\";\n");
@@ -266,7 +277,7 @@ void generate_headers(FILE* genfile)
 
 
 std::string generate_loop_rhs(FILE* genfile, char* &cmd, int ndims, uint32_t depth,
-        std::vector<uint32_t> local_size, std::vector<uint32_t> num_chares);
+        std::vector<uint32_t> local_size, std::vector<uint32_t> num_chares, Slice& lhs_key);
 
 
 void generate_code(FILE* genfile, char* &cmd, int ndims, 
@@ -297,16 +308,16 @@ void generate_code(FILE* genfile, char* &cmd, int ndims,
             // calculate stop index
             // FIXME calculate the range correctly
             for(int i = 0; i < ndims; i++)
-                fprintf(genfile, "stop_idx[%i] = (index[%i] == 0 ? local_size[%i] - 1 : "
-                        "(index[%i] == num_chares[%i] - 1 ? %i + local_size[%i] - 1 :"
-                        " %i + local_size[%i] - 1));\n",
+                fprintf(genfile, "stop_idx[%i] = (idx%i == 0 ? lsz%i - 1 : "
+                        "(idx%i == nchares%i - 1 ? %i + lsz%i - 1 :"
+                        " %i + lsz%i - 1));\n",
                     i, i, i, i, i, key.index[i].stop + depth, i, depth, i);
 
             // calculate local sizes with depth
             for(int i = 0; i < ndims; i++)
-                fprintf(genfile, "step[%i] = index[%i] == "
-                        "num_chares[%i] - 1 || index[%i] == 0 ? "
-                        "%i + local_size[%i] : %i + local_size[%i];\n", 
+                fprintf(genfile, "step[%i] = idx%i == "
+                        "nchares%i - 1 || idx%i == 0 ? "
+                        "%i + lsz%i : %i + lsz%i;\n", 
                     i, i, i, i, depth, i, 2 * depth, i);
 
             fprintf(genfile, "int count = 0;\n");
@@ -333,7 +344,7 @@ void generate_code(FILE* genfile, char* &cmd, int ndims,
             //fprintf(genfile, "count++;\n");
 
             fprintf(genfile, "f%i.data[%s] = %s;\n", fname, index_str.c_str(), 
-                    generate_loop_rhs(genfile, cmd, ndims, depth, local_size, num_chares).c_str());
+                    generate_loop_rhs(genfile, cmd, ndims, depth, local_size, num_chares, key).c_str());
 
             for (int i = 0; i < ndims; i++)
                 fprintf(genfile, "}\n");
@@ -381,37 +392,31 @@ void generate_code_cuda(FILE* genfile, char* &cmd, int ndims,
             // FIXME
             uint32_t depth = 1; //ghost_depth[fname];
 
-            fprintf(genfile, "int stop_idx[%i];\n", ndims);
-            fprintf(genfile, "int step[%i];\n", ndims);
+            fprintf(genfile, "int start_idx[%i];\n\t", ndims);
+            fprintf(genfile, "int stop_idx[%i];\n\t", ndims);
+            fprintf(genfile, "int step[%i];\n\t", ndims);
 
             char dims[3] = {'x', 'y', 'z'};
 
             for(int i = 0; i < ndims; i++)
-                fprintf(genfile, "int d%i = threadIdx.%c + blockDim.%c * blockIdx.%c;\n", 
+                fprintf(genfile, "int d%i = threadIdx.%c + blockDim.%c * blockIdx.%c;\n\t", 
                     i, dims[i], dims[i], dims[i]);
+
+            fprintf(genfile, "if (d0 == 0 && d1 == 0 && d2 == 0) printf(\"Test\\n\");\n\t");
 
             // calculate stop index
             // FIXME calculate the range correctly
             for(int i = 0; i < ndims; i++)
-                fprintf(genfile, "stop_idx[%i] = (index[%i] == 0 ? local_size[%i] - 1 : "
-                        "(index[%i] == num_chares[%i] - 1 ? %i + local_size[%i] - 1 :"
-                        " %i + local_size[%i] - 1));\n",
-                    i, i, i, i, i, key.index[i].stop + depth, i, depth, i);
+                fprintf(genfile, "start_idx[%i] = idx%i == 0 ? %i : %u;\n\t",
+                    i, i, key.index[i].start + depth, depth);
+
+            for(int i = 0; i < ndims; i++)
+                fprintf(genfile, "stop_idx[%i] = idx%i == nchares%i - 1 ? lsz%i + %i : lsz%i + %u;\n\t",
+                    i, i, i, i, key.index[i].stop + depth, i, depth);
 
             // calculate local sizes with depth
             for(int i = 0; i < ndims; i++)
-                fprintf(genfile, "step[%i] = index[%i] == "
-                        "num_chares[%i] - 1 || index[%i] == 0 ? "
-                        "%i + local_size[%i] : %i + local_size[%i];\n", 
-                    i, i, i, i, depth, i, 2 * depth, i);
-
-            //fprintf(genfile, "int count = 0;\n");
- 
-            // write the loops
-            /*for (int i = ndims - 1; i >= 0; i--)
-                fprintf(genfile, "for (int d%i = 0; d%i * %i"
-                        " < stop_idx[%i]; d%i++) {\n", 
-                        i, i, key.index[i].step, i, i);*/
+                fprintf(genfile, "step[%i] = %i + lsz%i;\n\t", i, 2 * depth, i);
 
             // check for bounds
             if (ndims == 1)
@@ -423,27 +428,34 @@ void generate_code_cuda(FILE* genfile, char* &cmd, int ndims,
             if (ndims == 3)
                 fprintf(genfile, "if(d0 * %i >= stop_idx[0] || d1 * %i >= stop_idx[1] || d2 * %i >= stop_idx[2]) ",
                     key.index[0].step, key.index[1].step, key.index[2].step);
-            fprintf(genfile, "return;\n");
+            fprintf(genfile, "return;\n\t");
+
+            if (ndims == 1)
+                fprintf(genfile, "if(d0 * %i < start_idx[0]) ",
+                    key.index[0].step);
+            if (ndims == 2)
+                fprintf(genfile, "if(d0 * %i < start_idx[0] || d1 * %i < start_idx[1]) ",
+                    key.index[0].step, key.index[1].step);
+            if (ndims == 3)
+                fprintf(genfile, "if(d0 * %i < start_idx[0] || d1 * %i < start_idx[1] || d2 * %i < start_idx[2]) ",
+                    key.index[0].step, key.index[1].step, key.index[2].step);
+            fprintf(genfile, "return;\n\t");
 
             std::string index_str;
 
             if (ndims == 1)
-                index_str = fmt::format("d0 * {} + {}", key.index[0].step, key.index[0].start);
+                index_str = fmt::format("d0 * {}", key.index[0].step);
             if (ndims == 2)
-                index_str = fmt::format("d0 * {} + {} + step[0] * (d1 * {} + {})", 
-                        key.index[0].step, key.index[0].start, key.index[1].step, key.index[1].step);
+                index_str = fmt::format("d0 * {} + step[0] * d1 * {}", 
+                        key.index[0].step, key.index[1].step);
             if (ndims == 3)
                 index_str = fmt::format(
-                        "d0 * {} + {} + step[0] * (d1 * {} + {}) + step[0] * step[1] * (d2 * {} + {})", 
-                        key.index[0].step, key.index[0].start, key.index[1].step, key.index[1].start,
-                        key.index[2].step, key.index[2].start);
+                        "d0 * {} + step[0] * d1 * {} + step[0] * step[1] * d2 * {}",
+                        key.index[0].step, key.index[1].step, key.index[2].step);
 
-            //fprintf(genfile, "count++;\n");
+            fprintf(genfile, "f%i[%s] = %s;\n\t", fname, index_str.c_str(), 
+                    generate_loop_rhs(genfile, cmd, ndims, depth, local_size, num_chares, key).c_str());
 
-            fprintf(genfile, "f%i[%s] = %s;\n", fname, index_str.c_str(), 
-                    generate_loop_rhs(genfile, cmd, ndims, depth, local_size, num_chares).c_str());
-
-            //fprintf(genfile, "std::cout << \"Loop iterations = \" << count << std::endl;\n");
             break;
         }
         case Operation::norm:
@@ -466,7 +478,7 @@ void generate_code_cuda(FILE* genfile, char* &cmd, int ndims,
 }
 
 std::string generate_loop_rhs(FILE* genfile, char* &cmd, int ndims, uint32_t depth,
-        std::vector<uint32_t> local_size, std::vector<uint32_t> num_chares)
+        std::vector<uint32_t> local_size, std::vector<uint32_t> num_chares, Slice& lhs_key)
 {
     OperandType operand_type = lookup_type(extract<uint8_t>(cmd));
     uint8_t opcode = extract<uint8_t>(cmd);
@@ -505,9 +517,9 @@ std::string generate_loop_rhs(FILE* genfile, char* &cmd, int ndims, uint32_t dep
             std::string op1, op2, opstr;
 
             op1 = generate_loop_rhs(genfile, cmd, ndims, depth, local_size, 
-                            num_chares);
+                            num_chares, lhs_key);
             op2 = generate_loop_rhs(genfile, cmd, ndims, depth, local_size, 
-                            num_chares);
+                            num_chares, lhs_key);
 
             if (oper == Operation::add)
                 opstr = "+";
@@ -521,7 +533,7 @@ std::string generate_loop_rhs(FILE* genfile, char* &cmd, int ndims, uint32_t dep
         case Operation::getitem: 
         {
             std::string f_str = generate_loop_rhs(
-                    genfile, cmd, ndims, depth, local_size, num_chares);
+                    genfile, cmd, ndims, depth, local_size, num_chares, lhs_key);
 
             Slice key = get_slice(cmd, ndims, num_chares, local_size);
             
@@ -529,17 +541,17 @@ std::string generate_loop_rhs(FILE* genfile, char* &cmd, int ndims, uint32_t dep
 
             if (ndims == 1)
                 index_str = fmt::format("{} + d0 * {}", 
-                        key.index[0].start, key.index[0].step);
+                        key.index[0].start - lhs_key.index[0].start, key.index[0].step);
             if (ndims == 2)
                 index_str = fmt::format("step[0] * ({} + d1 * {}) + ({} + d0 * {})", 
-                        key.index[1].start, key.index[1].step,
-                        key.index[0].start, key.index[0].step);
+                        key.index[1].start - lhs_key.index[1].start, key.index[1].step,
+                        key.index[0].start - lhs_key.index[0].start, key.index[0].step);
             if (ndims == 3)
                 index_str = fmt::format(
                         "step[0] * step[1] * ({} + d2 * {}) + step[0] * ({} + d1 * {}) + ({} + d0 * {})", 
-                        key.index[2].start, key.index[2].step,
-                        key.index[1].start, key.index[1].step,
-                        key.index[0].start, key.index[0].step);
+                        key.index[2].start - lhs_key.index[2].start, key.index[2].step,
+                        key.index[1].start - lhs_key.index[1].start, key.index[1].step,
+                        key.index[0].start - lhs_key.index[0].start, key.index[0].step);
 
             std::string result_str = fmt::format("({})[{}]", f_str, index_str);
 

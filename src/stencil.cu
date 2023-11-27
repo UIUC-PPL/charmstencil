@@ -4,10 +4,23 @@
 #include <cmath>
 #include <fstream>
 #include <cstring>
+#include <iostream>
 #include <fmt/format.h>
 #include "hapi.h"
 
 #define COMPUTE_FUNC "_Z12compute_funcv"
+
+#define CHECK(expression)                                    \
+  {                                                          \
+    CUresult status = (expression);                          \
+    if (status != CUDA_SUCCESS) {                            \
+      const char* err_str;                                   \
+      cuGetErrorString(status, &err_str);                    \
+      std::cerr << "Error on line " << __LINE__ << ": "      \
+                << err_str << std::endl;                     \
+      std::exit(EXIT_FAILURE);                               \
+    }                                                        \
+  }
 
 #define BSZ1D 128
 #define BSZ2D 16
@@ -175,7 +188,9 @@ void invoke_init_fields(double** fields, uint8_t num_fields, uint32_t total_size
 
 void* get_module(std::string &fatbin_file)
 {
-    std::ifstream file(fatbin_file, std::ios::binary | std::ios::ate);
+    std::ifstream file(fatbin_file.c_str(), std::ios::binary | std::ios::ate);
+    if (file.fail())
+        CkAbort("File could not be opened\n");
     std::streamsize size = file.tellg();
     file.seekg(0, std::ios::beg);
     void* buffer = malloc(size);
@@ -190,8 +205,8 @@ CUfunction load_kernel(size_t &hash)
 
     std::string fatbin_file = fmt::format("./stencil_{}.fatbin", hash);
 
-    cuModuleLoadFatBinary(&cumodule, get_module(fatbin_file));
-    cuModuleGetFunction(&kernel, cumodule, COMPUTE_FUNC);
+    CHECK(cuModuleLoadFatBinary(&cumodule, get_module(fatbin_file)));
+    CHECK(cuModuleGetFunction(&kernel, cumodule, COMPUTE_FUNC));
     return kernel;
 }
 
@@ -199,6 +214,7 @@ void launch_kernel(void** args, uint32_t* local_size, int* block_sizes,
     CUfunction& compute_kernel, cudaStream_t& stream)
 {
     // figure out how to load compute kernel
+    printf("Launch kernel %i, %i, %i\n", block_sizes[0], block_sizes[1], block_sizes[2]);
     cuLaunchKernel(compute_kernel, 
         ceil(((float) local_size[0]) / block_sizes[0]),
         ceil(((float) local_size[1]) / block_sizes[1]),

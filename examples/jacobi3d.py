@@ -36,7 +36,7 @@ class Grid(Stencil):
 if __name__ == '__main__':
     #interface = DebugInterface()
     #pr = cProfile.Profile()
-    interface = CCSInterface("141.142.145.82", 1234)
+    interface = CCSInterface("141.142.145.73", 1234)
     grid = Grid((16, 16, 16), interface)
     #pr.enable()
     start = time.time()
