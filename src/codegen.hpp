@@ -6,14 +6,11 @@
 #include <unordered_map>
 #include <string_view>
 #include <dlfcn.h>
-#include <cuda.h>
 #include "charm++.h"
 #define FMT_HEADER_ONLY
 #include <fmt/format.h>
-#include "hapi.h"
 
-typedef CUfunction compute_fun_t;
-
+typedef void* (*compute_fun_t)(double**, uint32_t*, int*, uint32_t*);
 
 template<class T>
 inline T extract(char* &msg, bool increment=true)
@@ -149,7 +146,7 @@ compute_fun_t load_compute_fun(size_t hash)
 }
 
 
-size_t compile_compute_fun(char* cmd, uint32_t cmd_size, int ndims, 
+size_t compile_compute_fun(char* cmd, uint32_t cmd_size, int ndims, uint8_t nfields,
         std::vector<uint32_t> ghost_depth,
         std::vector<uint32_t> local_size, std::vector<uint32_t> num_chares,
         std::vector<uint8_t> &ghost_fields)
@@ -206,12 +203,14 @@ size_t generate(char* cmd, uint32_t cmd_size, int ndims, std::vector<uint32_t> g
     std::string filename = fmt::format("stencil_{}", graph_hash);
     FILE* genfile = fopen((filename + ".cpp").c_str(), "w");
     fprintf(genfile, "#include <iostream>\n");
-    fprintf(genfile, "#include <vector>\n");
-    fprintf(genfile, "#include \"field.hpp\"\n\n");
+    fprintf(genfile, "#include <vector>\n\n");
     fprintf(genfile, "extern \"C\" {\n");
-    fprintf(genfile, "void compute_func(std::vector<Field> &fields, "
-            "std::vector<uint32_t> &num_chares, std::vector<int> &index, "
-            "std::vector<uint32_t> &local_size) {\n");
+    fprintf(genfile, "void compute_func(double** fields, "
+            "uint32_t* num_chares, int* index, uint32_t* local_size) {\n");
+
+    fprintf(genfile, "int start_idx[%i];\n", ndims);
+    fprintf(genfile, "int stop_idx[%i];\n", ndims);
+    fprintf(genfile, "int step[%i];\n", ndims);
 
     // Add some prints for debugging
     //fprintf(genfile, "std::cout << \"Generated function called\\n\";\n");
@@ -301,55 +300,49 @@ void generate_code(FILE* genfile, char* &cmd, int ndims,
             // FIXME
             uint32_t depth = 1; //ghost_depth[fname];
 
-            fprintf(genfile, "Field& f%" PRIu8 " = fields[%" PRIu8 "];\n", fname, fname);
-            fprintf(genfile, "int stop_idx[%i];\n", ndims);
-            fprintf(genfile, "int step[%i];\n", ndims);
+            fprintf(genfile, "double* f%" PRIu8 " = fields[%" PRIu8 "];\n", fname, fname);
 
-            // calculate stop index
-            // FIXME calculate the range correctly
             for(int i = 0; i < ndims; i++)
-                fprintf(genfile, "stop_idx[%i] = (idx%i == 0 ? lsz%i - 1 : "
-                        "(idx%i == nchares%i - 1 ? %i + lsz%i - 1 :"
-                        " %i + lsz%i - 1));\n",
-                    i, i, i, i, i, key.index[i].stop + depth, i, depth, i);
+                fprintf(genfile, "start_idx[%i] = index[%i] == 0 ? %i : %u;\n",
+                    i, i, key.index[i].start + depth, depth);
+
+            for(int i = 0; i < ndims; i++)
+                fprintf(genfile, "stop_idx[%i] = index[%i] == num_chares[%i] - 1 ? "
+                    "local_size[%i] + %i : local_size[%i] + %u;\n",
+                    i, i, i, i, key.index[i].stop + depth, i, depth);
 
             // calculate local sizes with depth
             for(int i = 0; i < ndims; i++)
-                fprintf(genfile, "step[%i] = idx%i == "
-                        "nchares%i - 1 || idx%i == 0 ? "
-                        "%i + lsz%i : %i + lsz%i;\n", 
-                    i, i, i, i, depth, i, 2 * depth, i);
-
-            fprintf(genfile, "int count = 0;\n");
+                fprintf(genfile, "step[%i] = %i + local_size[%i];\n", i, 2 * depth, i);
  
             // write the loops
             for (int i = ndims - 1; i >= 0; i--)
-                fprintf(genfile, "for (int d%i = 0; d%i * %i"
-                        " < stop_idx[%i]; d%i++) {\n", 
-                        i, i, key.index[i].step, i, i);
+                fprintf(genfile, "for (int d%i = start_idx[%i]; d%i * %i"
+                        " < stop_idx[%i]; d%i += %i) {\n", 
+                        i, i, i, key.index[i].step, i, i, key.index[i].step);
 
             std::string index_str;
 
             if (ndims == 1)
-                index_str = fmt::format("d0 * {} + {}", key.index[0].step, key.index[0].start);
+                index_str = fmt::format("d0 * {}", key.index[0].step);
             if (ndims == 2)
-                index_str = fmt::format("d0 * {} + {} + step[0] * (d1 * {} + {})", 
-                        key.index[0].step, key.index[0].start, key.index[1].step, key.index[1].step);
+                index_str = fmt::format("d0 * {} + step[0] * d1 * {}", 
+                        key.index[0].step, key.index[1].step);
             if (ndims == 3)
                 index_str = fmt::format(
-                        "d0 * {} + {} + step[0] * (d1 * {} + {}) + step[0] * step[1] * (d2 * {} + {})", 
-                        key.index[0].step, key.index[0].start, key.index[1].step, key.index[1].start,
-                        key.index[2].step, key.index[2].start);
+                        "d0 * {} + step[0] * d1 * {} + step[0] * step[1] * d2 * {}", 
+                        key.index[0].step, key.index[1].step, key.index[2].step);
 
             //fprintf(genfile, "count++;\n");
 
-            fprintf(genfile, "f%i.data[%s] = %s;\n", fname, index_str.c_str(), 
+            fprintf(genfile, "f%i[%s] = %s;\n", fname, index_str.c_str(), 
                     generate_loop_rhs(genfile, cmd, ndims, depth, local_size, num_chares, key).c_str());
 
             for (int i = 0; i < ndims; i++)
                 fprintf(genfile, "}\n");
 
-            //fprintf(genfile, "std::cout << \"Loop iterations = \" << count << std::endl;\n");
+            generate_code(genfile, cmd, ndims, ghost_depth, local_size, num_chares, ghost_fields);
+
             break;
         }
         case Operation::norm:
@@ -499,7 +492,7 @@ std::string generate_loop_rhs(FILE* genfile, char* &cmd, int ndims, uint32_t dep
                 case OperandType::field:
                 {
                     uint8_t fname = extract<uint8_t>(cmd);
-                    res = fmt::format("f{}", fname);
+                    res = fmt::format("fields[{}]", fname);
                     break;
                 }
                 default:

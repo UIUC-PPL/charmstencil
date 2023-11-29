@@ -88,8 +88,8 @@ class Stencil(object):
         self.initialize(shape, num_fields, **kwargs)
 
     def __del__(self):
-        if self._allocated:
-            self.interface.delete_stencil(self.name)
+        #if self._allocated:
+        self.interface.delete_stencil(self.name)
 
     def _call_iterate(self, *args, **kwargs):
         self.active_graph, prev_graph = self._iterate_graph, self.active_graph
@@ -116,12 +116,14 @@ class Stencil(object):
         return ret
 
     def sync(self):
-        self.interface.sync_stencil(self.name)
+        self.evaluate()
+        self.interface.sync_stencil(self)
 
     def initialize(self, shape, num_fields, **kwargs):
         self.interface = kwargs.pop('interface', DummyInterface())
         max_epochs = kwargs.pop('max_epochs', 10)
         self.odf = kwargs.pop('odf', 4)
+        self.boundary = kwargs.pop('boundary', [1.] * num_fields)
         self.name = get_stencil_name()
         self.num_fields = num_fields
         self.shape = shape

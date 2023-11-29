@@ -5,11 +5,10 @@ from charmstencil.interface import DebugInterface, CCSInterface
 
 class Grid(Stencil):
     def __init__(self, n, interface):
-        self.initialize(n, interface=interface, max_epochs=1000)
-        self.x = self.create_field(ghost_depth=1)
-        self.y = self.create_field(ghost_depth=1)
+        self.x, self.y = self.initialize(
+            (n, n), interface=interface, max_epochs=1000, odf=2,
+            num_fields=2)
         #self.apply_boundary(100.)
-        self.threshold = 1e-8
         self.itercount = 0
 
     def iterate(self, nsteps):
@@ -18,11 +17,7 @@ class Grid(Stencil):
                                      self.x[1:-1, :-2] + self.x[1:-1, 2:])
         self.x, self.y = self.y, self.x
         self.itercount += 1
-        if self.itercount % nsteps == 0:
-            #return norm(self.x - self.y, np.inf).get() > self.threshold
-            return False
-        else:
-            return True
+        return self.itercount == nsteps
 
     def boundary(self, bc):
         self.x[0, :] = self.y[0, :] = bc
@@ -32,6 +27,6 @@ class Grid(Stencil):
 
 if __name__ == '__main__':
     #interface = DebugInterface()
-    interface = CCSInterface("172.17.0.1", 10000)
+    interface = DebugInterface()
     grid = Grid((128, 128), interface)
-    grid.solve(1)
+    grid.solve(10)

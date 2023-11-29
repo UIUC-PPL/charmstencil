@@ -14,32 +14,29 @@ module stencil
     array [3D] Stencil
     {
         entry Stencil(uint8_t name_, uint32_t ndims_, uint32_t dims_[ndims_], uint32_t odf_,
-        uint8_t num_fields_, uint32_t ghost_depth_[ndims_]);
+        uint8_t num_fields_, uint32_t ghost_depth_[num_fields_], double boundary_[num_fields_]);
             
-        entry void receive_graph(int epoch, int size, char cmd[size]);
+        entry void receive_graph(uint32_t epoch, int size, char cmd[size]);
 
-        entry void execute_graph(int epoch, int size, char cmd[size]);
+        entry void execute_graph(uint32_t epoch, int size, char cmd[size]);
 
-        entry void receive_ghost(int iter, uint8_t fname, int dir, int size, nocopydevice double data[size]);
+        entry void receive_ghost(int iter, uint8_t fname, int dir, int size, double data[size]);
 
         entry [reductiontarget] void start()
         {
-            while (EPOCH > -1)
-            {
-                when receive_graph[EPOCH] (int epoch, int size, char cmd[size])
-                    serial "execute graph" {
-                        execute_graph(epoch, size, cmd);
-                    }
-            }
+            when receive_graph[EPOCH] (uint32_t epoch, int size, char cmd[size])
+                serial "execute graph" {
+                    execute_graph(epoch, size, cmd);
+                }
         };
 
-        entry [threaded] void wait(ck::future<bool> done);
+        entry [threaded] void wait(ck::future<bool> done, uint32_t last_epoch);
 
         entry void iterate(uint8_t gid)
         {
             while (num_ghost_recv < num_nbrs)
             {
-                when receive_ghost[itercount](int iter, uint8_t fname, int dir, int size, nocopydevice double data[size])
+                when receive_ghost[itercount](int iter, uint8_t fname, int dir, int size, double data[size])
                     serial "process_ghost" {
                         process_ghost(fname, dir, size, data);
                         num_ghost_recv++;

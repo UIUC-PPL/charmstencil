@@ -1,47 +1,17 @@
 #include <vector>
 #include <cstring>
-#include "field.hpp"
 #include "codegen.hpp"
 #include "stencil.decl.h"
 
 
-#define CHECK(expression)                                    \
-  {                                                          \
-    CUresult status = (expression);                          \
-    if (status != CUDA_SUCCESS) {                            \
-      const char* err_str;                                   \
-      cuGetErrorString(status, &err_str);                    \
-      std::cerr << "Error on line " << __LINE__ << ": "      \
-                << err_str << std::endl;                     \
-      std::exit(EXIT_FAILURE);                               \
-    }                                                        \
-  }
+#define IDX3D(x, y, z, step) ((x) + (y) * (step)[0] + (z) * (step)[0] * (step)[1])
 
-
-#define LEFT 0
-#define RIGHT 1
-#define FRONT 2
-#define BACK 3
+#define BACK 0
+#define FRONT 1
+#define LEFT 2
+#define RIGHT 3
 #define DOWN 4
 #define UP 5
-
-
-extern void invoke_fb_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream);
-extern void invoke_ud_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream);
-extern void invoke_rl_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream);
-extern void invoke_fb_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream);
-extern void invoke_ud_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream);
-extern void invoke_rl_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream);
-extern void invoke_init_fields(double** fields, uint8_t num_fields, uint32_t total_size, cudaStream_t stream);
-extern CUfunction load_kernel(size_t &hash);
-extern void launch_kernel(void** args, uint32_t* local_size, int* block_sizes, 
-    CUfunction& compute_kernel, cudaStream_t& stream);
 
 
 CProxy_CodeGenCache codegen_proxy;
@@ -74,7 +44,7 @@ public:
         if (find == std::end(cache))
         {
             // load the function
-            fun = load_kernel(hash);
+            fun = load_compute_fun(hash);
             cache[hash] = fun;
         }
         else
@@ -165,14 +135,14 @@ public:
     int init_count;
     bool bounds[6];
 
-    cudaStream_t compute_stream;
-    cudaStream_t comm_stream;
+    bool is_sync;
+    ck::future<bool> sync_future;
+    uint32_t sync_epoch;
     
-    double* send_ghosts[27];
-    double* recv_ghosts[27];
+    double* send_ghosts;
 
     Stencil(uint8_t name_, uint32_t ndims_, uint32_t* dims_, uint32_t odf_,
-        uint8_t num_fields_, uint32_t* ghost_depth_)
+        uint8_t num_fields_, uint32_t* ghost_depth_, double* boundary_)
         : EPOCH(0)
         , name(name_)
         , ndims(ndims_)
@@ -186,6 +156,7 @@ public:
         , is_gpu(true)
         , itercount(0)
         , init_count(0)
+        , is_sync(false)
     {
         index[0] = thisIndex.x;
         index[1] = thisIndex.y;
@@ -238,36 +209,17 @@ public:
                 bounds[2 * i + 1] = true;
         }
 
-        create_fields(num_fields_, ghost_depth_);
-
         // FIXME handle different ghost depths for different fields
         for (int i = 0; i < ndims; i++)
-            step[i] = local_size[i] + 2 * ghost_depth[0];
+            step[i] = local_size[i] + 2 * ghost_depth_[0];
 
-        
+        create_fields(num_fields_, ghost_depth_, boundary_);
+
         // FIXME fix non cube decompositions
         ghost_size = ghost_depth[0] * local_size[0] * local_size[0];
-        CkPrintf("Ghost size = %u\n", ghost_size);
+        //CkPrintf("Ghost size = %u\n", ghost_size);
+        send_ghosts = (double*) malloc(sizeof(double) * ghost_size);
 
-        //send_ghosts.resize(num_nbrs);
-        //recv_ghosts.resize(num_nbrs);
-
-        CUdevice cuDevice;
-        CUcontext cuContext;
-        hapiCheck(cudaFree(0));
-        //CHECK(cuDeviceGet(&cuDevice, 0)); 
-        //CHECK(cuCtxCreate(&cuContext, 0, cuDevice));
-        //CHECK(cuCtxGetCurrent(&context));
-
-        hapiCheck(cudaStreamCreateWithPriority(&compute_stream, cudaStreamDefault, 0));
-        hapiCheck(cudaStreamCreateWithPriority(&comm_stream, cudaStreamDefault, -1));
-        
-
-        for (int i = 0; i < num_nbrs; i++)
-        {
-            hapiCheck(cudaMalloc((void**)&send_ghosts[i], sizeof(double) * ghost_size));
-            hapiCheck(cudaMalloc((void**)&recv_ghosts[i], sizeof(double) * ghost_size));
-        }
 
         thisProxy(thisIndex.x, thisIndex.y, thisIndex.z).start();
     }
@@ -277,12 +229,10 @@ public:
     ~Stencil()
     {
         delete_cache();
-        for (int i = 0; i < num_nbrs; i++)
-        {
-            hapiCheck(cudaFree(send_ghosts[i]));
-            hapiCheck(cudaFree(recv_ghosts[i]));
-        }
-        //free(send_ghosts);
+        free(send_ghosts);
+        for (int i = 0; i < num_fields; i++)
+            free(fields[i]);
+        free(fields);
         //free(recv_ghosts);
     }
 
@@ -292,14 +242,11 @@ public:
             free(cmd);
     }
 
-    void execute_graph(int epoch, int size, char* cmd)
+    void execute_graph(uint32_t epoch, int size, char* cmd)
     {
 #ifndef NDEBUG
         CkPrintf("execute_graph called\n");
 #endif
-
-        ck::future<bool> fut;
-        futures.push_back(fut);
 
         // cache the graphs
         uint8_t num_graphs = extract<uint8_t>(cmd);
@@ -323,6 +270,7 @@ public:
         }
 
         num_iters = extract<uint32_t>(cmd);
+        //CkPrintf("Iters = %u\n", num_iters);
         itercmd = cmd;
         run_next_iteration();
         //thisProxy[thisIndex].iterate();
@@ -330,7 +278,7 @@ public:
 
     void run_next_iteration()
     {
-        CkPrintf("Iterating %u, %u\n", itercount, num_iters);
+        //CkPrintf("Iterating %u, %u\n", itercount, num_iters);
 
         if (itercount++ < num_iters)
         {
@@ -338,12 +286,12 @@ public:
             if(thisIndex.x == 0 && thisIndex.y == 0 && thisIndex.z == 0)
                 CkPrintf("Running iteration %u\n", itercount);
 #endif
-            if (itercount == 1)
+            /*if (itercount == 1)
             {
                 double start_time = CkTimer();
                 CkCallback cb(CkReductionTarget(CodeGenCache, start_time), codegen_proxy[0]);
                 contribute(sizeof(double), &start_time, CkReduction::min_double, cb);
-            }
+            }*/
 
             curr_gid = extract<uint8_t>(itercmd);
             char* graph = graph_cache[curr_gid];
@@ -364,27 +312,36 @@ public:
         }
         else
         {
-            double end_time = CkTimer();
-            CkCallback cb(CkReductionTarget(CodeGenCache, end_time), codegen_proxy[0]);
-            contribute(sizeof(double), &end_time, CkReduction::max_double, cb);
+            //double end_time = CkTimer();
+            //CkCallback cb(CkReductionTarget(CodeGenCache, end_time), codegen_proxy[0]);
+            //contribute(sizeof(double), &end_time, CkReduction::max_double, cb);
             itercount = 0;
             num_iters = 0;
             itercmd = nullptr;
-            futures[EPOCH++].set(true);
+            ++EPOCH;
 #ifndef NDEBUG
-            CkPrintf("Compute time = %f\n", comp_time);
-            CkPrintf("Done epoch %i\n", EPOCH);
+            //CkPrintf("Compute time = %f\n", comp_time);
+            CkPrintf("Done epoch %u\n", EPOCH);
 #endif
+            if (is_sync && sync_epoch == EPOCH)
+            {
+                sync_future.set(true);
+                is_sync = false;
+            }
+            thisProxy(thisIndex.x, thisIndex.y, thisIndex.z).start();
         }
     }
 
-    void wait(ck::future<bool> done)
+    void wait(ck::future<bool> done, uint32_t last_epoch)
     {
-        ck::wait_all(futures.begin(), futures.end());
-        for (auto& f: futures)
-            f.release();
-        futures.clear();
-        done.set(true);
+        if (EPOCH == last_epoch)
+            done.set(true);
+        else
+        {
+            sync_future = done;
+            is_sync = true;
+            sync_epoch = last_epoch;
+        }
     }
 
     void call_compute(uint8_t gid)
@@ -393,7 +350,6 @@ public:
         uint32_t cmd_size = graph_size[gid];
 
         bool gen = extract<bool>(graph);
-        CkPrintf("Gen = %d\n", gen);
          
         if (gen)
         {
@@ -422,22 +378,8 @@ public:
 
             //CkPrintf("Local size = %i, %i, %i\n", local_size[0], local_size[1], local_size[2]);
 
-            // TODO don't hardcode this
-            int block_sizes[3] = {8, 8, 8};
-            //double** fields_ptr = fields.begin();
-            void* args[num_fields + 3 * ndims];
-            for (int i = 0; i < num_fields; i++)
-                args[i] = &fields[i];
-            for (int i = 0; i < ndims; i++)
-                args[num_fields + i] = &num_chares[i];
-            for (int i = 0; i < ndims; i++)            
-                args[num_fields + ndims + i] = &index[i];
-            for (int i = 0; i < ndims; i++)
-                args[num_fields + 2 * ndims + i] = &local_size[i];
-            double start_comp = CkTimer();
-            launch_kernel(args, local_size, block_sizes, compute_f, compute_stream);
-            //compute_f(fields, num_chares, index, local_size);
-            comp_time += (CkTimer() - start_comp);
+            compute_f(fields, num_chares, index, local_size);
+            //comp_time += (CkTimer() - start_comp);
         }
 
 #ifndef NDEBUG
@@ -446,7 +388,7 @@ public:
 #endif
     }
 
-    void create_fields(uint8_t num_fields_, uint32_t* ghost_depth_)
+    void create_fields(uint8_t num_fields_, uint32_t* ghost_depth_, double* boundary_)
     {
         num_fields = num_fields_;
         //fields.resize(num_fields);
@@ -454,29 +396,77 @@ public:
         ghost_depth.resize(num_fields);
         for (uint8_t fname = 0; fname < num_fields; fname++)
         {
+            double bc = boundary_[fname];
             uint32_t depth = ghost_depth_[fname];
             uint32_t total_local_size = 1;
 #ifndef NDEBUG
-            CkPrintf("Create field %" PRIu8 " with depth %" PRIu8 "\n", fname, depth);
+            CkPrintf("Create field %" PRIu8 " with depth %" PRIu8 " bc %f\n", 
+                fname, depth, bc);
 #endif
 
             for (int i = 0; i < ndims; i++)
                 total_local_size *= (local_size[i] + 2 * depth);
 
-            hapiCheck(cudaMalloc((void**) &(fields[fname]), sizeof(double) * total_local_size));
+            fields[fname] = (double*) malloc(sizeof(double) * total_local_size);
+            std::memset(fields[fname], 0, sizeof(double) * total_local_size);
+            double* f = fields[fname];
+            if (ndims == 3)
+            {
+                for (int x = depth; x < local_size[0] + depth; x++)
+                    for (int y = depth; y < local_size[1] + depth; y++)
+                        f[IDX3D(x, y, depth, step)] = bc;
+
+                for (int x = depth; x < local_size[0] + depth; x++)
+                    for (int y = depth; y < local_size[1] + depth; y++)
+                        f[IDX3D(x, y, local_size[2] + depth, step)] = bc;
+
+                for (int x = depth; x < local_size[0] + depth; x++)
+                    for (int z = depth; z < local_size[2] + depth; z++)
+                        f[IDX3D(x, depth, z, step)] = bc;
+
+                for (int x = depth; x < local_size[0] + depth; x++)
+                    for (int z = depth; z < local_size[2] + depth; z++)
+                        f[IDX3D(x, local_size[1] + depth, z, step)] = bc;
+
+                for (int y = depth; y < local_size[1] + depth; y++)
+                    for (int z = depth; z < local_size[2] + depth; z++)
+                        f[IDX3D(depth, y, z, step)] = bc;
+
+                for (int y = depth; y < local_size[1] + depth; y++)
+                    for (int z = depth; z < local_size[2] + depth; z++)
+                        f[IDX3D(local_size[2] + depth, y, z, step)] = bc;
+            }
+
             ghost_depth[fname] = depth;
-            if (is_gpu)
-                invoke_init_fields(fields, num_fields, total_local_size, compute_stream);
         }
+    }
+
+    void pack_ghosts(double* f, double* gh, int depth, int startx, int starty, int startz,
+        int stopx, int stopy, int stopz)
+    {
+        int i = 0;
+        for(int x = startx; x < stopx; x++)
+            for(int y = starty; y < stopy; y++)
+                for(int z = startz; z < stopz; z++)
+                    gh[i++] = f[IDX3D(x, y, z, step)];
+    }
+
+    void unpack_ghosts(double* f, double* gh, int depth, int startx, int starty, int startz,
+        int stopx, int stopy, int stopz)
+    {
+        int i = 0;
+        for(int x = startx; x < stopx; x++)
+            for(int y = starty; y < stopy; y++)
+                for(int z = startz; z < stopz; z++)
+                    f[IDX3D(x, y, z, step)] = gh[i++];
     }
 
     // FIXME doesn't do diagonal neighbors
     void send_ghost_data(std::vector<uint8_t> &fnames)
     {
         double ghost_start = CkTimer();
-        int start_x, start_y, start_z;
-        int stop_x, stop_y, stop_z;
-        //CkPrintf("Step sizes = (%i, %i, %i)\n", step[0], step[1], step[2]);
+        int startx, starty, startz;
+        int stopx, stopy, stopz;
 
         // TODO send all ghosts in a single message
         for (int i = 0; i < fnames.size(); i++)
@@ -491,81 +481,75 @@ public:
                 // down
                 if (!bounds[DOWN])
                 {
-                    start_x = 1;
-                    start_y = 1;
-                    start_z = 1;
-                    stop_x = start_x + local_size[0];
-                    stop_y = start_y + local_size[1];
-                    stop_z = start_z + 1;
-                    invoke_ud_packing_kernel(f, send_ghosts[DOWN], depth, start_x,
-                        start_y, start_z, step[0], step[1], local_size, compute_stream);
+                    startx = 1;
+                    starty = 1;
+                    startz = 1;
+                    stopx = startx + local_size[0];
+                    stopy = starty + local_size[1];
+                    stopz = startz + 1;
+                    pack_ghosts(f, send_ghosts, depth, startx, starty, startz, stopx, stopy, stopz);
                     thisProxy(thisIndex.x, thisIndex.y, thisIndex.z - 1).receive_ghost(
-                        itercount, fname, UP, ghost_size, CkDeviceBuffer(send_ghosts[DOWN], comm_stream));
+                        itercount, fname, UP, ghost_size, send_ghosts);
                 }
                 if (!bounds[UP])
                 {
-                    start_x = 1;
-                    start_y = 1;
-                    start_z = local_size[2];
-                    stop_x = start_x + local_size[0];
-                    stop_y = start_y + local_size[1];
-                    stop_z = start_z + 1;
-                    invoke_ud_packing_kernel(f, send_ghosts[UP], depth, start_x,
-                        start_y, start_z, step[0], step[1], local_size, compute_stream);
+                    startx = 1;
+                    starty = 1;
+                    startz = local_size[2];
+                    stopx = startx + local_size[0];
+                    stopy = starty + local_size[1];
+                    stopz = startz + 1;
+                    pack_ghosts(f, send_ghosts, depth, startx, starty, startz, stopx, stopy, stopz);
                     thisProxy(thisIndex.x, thisIndex.y, thisIndex.z + 1).receive_ghost(
-                        itercount, fname, UP, ghost_size, CkDeviceBuffer(send_ghosts[UP], comm_stream));
+                        itercount, fname, DOWN, ghost_size, send_ghosts);
                 }
                 if (!bounds[LEFT])
                 {
-                    start_x = 1;
-                    start_y = 1;
-                    start_z = 1;
-                    stop_x = start_x + 1;
-                    stop_y = start_y + local_size[1];
-                    stop_z = start_z + local_size[2];
-                    invoke_rl_packing_kernel(f, send_ghosts[LEFT], depth, start_x,
-                        start_y, start_z, step[0], step[1], local_size, compute_stream);
+                    startx = 1;
+                    starty = 1;
+                    startz = 1;
+                    stopx = startx + 1;
+                    stopy = starty + local_size[1];
+                    stopz = startz + local_size[2];
+                    pack_ghosts(f, send_ghosts, depth, startx, starty, startz, stopx, stopy, stopz);
                     thisProxy(thisIndex.x, thisIndex.y - 1, thisIndex.z).receive_ghost(
-                        itercount, fname, UP, ghost_size, CkDeviceBuffer(send_ghosts[LEFT], comm_stream));
+                        itercount, fname, RIGHT, ghost_size, send_ghosts);
                 }
                 if (!bounds[RIGHT])
                 {
-                    start_x = local_size[0];
-                    start_y = 1;
-                    start_z = 1;
-                    stop_x = start_x + 1;
-                    stop_y = start_y + local_size[1];
-                    stop_z = start_z + local_size[2];
-                    invoke_rl_packing_kernel(f, send_ghosts[RIGHT], depth, start_x,
-                        start_y, start_z, step[0], step[1], local_size, compute_stream);
+                    startx = local_size[0];
+                    starty = 1;
+                    startz = 1;
+                    stopx = startx + 1;
+                    stopy = starty + local_size[1];
+                    stopz = startz + local_size[2];
+                    pack_ghosts(f, send_ghosts, depth, startx, starty, startz, stopx, stopy, stopz);
                     thisProxy(thisIndex.x, thisIndex.y + 1, thisIndex.z).receive_ghost(
-                        itercount, fname, UP, ghost_size, CkDeviceBuffer(send_ghosts[RIGHT], comm_stream));
+                        itercount, fname, LEFT, ghost_size, send_ghosts);
                 }
                 if (!bounds[FRONT])
                 {
-                    start_x = 1;
-                    start_y = 1;
-                    start_z = 1;
-                    stop_x = start_x + local_size[0];
-                    stop_y = start_y + 1;
-                    stop_z = start_z + local_size[2];
-                    invoke_fb_packing_kernel(f, send_ghosts[FRONT], depth, start_x,
-                        start_y, start_z, step[0], step[1], local_size, compute_stream);
+                    startx = 1;
+                    starty = 1;
+                    startz = 1;
+                    stopx = startx + local_size[0];
+                    stopy = starty + 1;
+                    stopz = startz + local_size[2];
+                    pack_ghosts(f, send_ghosts, depth, startx, starty, startz, stopx, stopy, stopz);
                     thisProxy(thisIndex.x + 1, thisIndex.y, thisIndex.z).receive_ghost(
-                        itercount, fname, UP, ghost_size, CkDeviceBuffer(send_ghosts[FRONT], comm_stream));
+                        itercount, fname, BACK, ghost_size, send_ghosts);
                 }
                 if (!bounds[BACK])
                 {
-                    start_x = 1;
-                    start_y = local_size[1];
-                    start_z = 1;
-                    stop_x = start_x + local_size[0];
-                    stop_y = start_y + 1;
-                    stop_z = start_z + local_size[2];
-                    invoke_fb_packing_kernel(f, send_ghosts[BACK], depth, start_x,
-                        start_y, start_z, step[0], step[1], local_size, compute_stream);
+                    startx = 1;
+                    starty = local_size[1];
+                    startz = 1;
+                    stopx = startx + local_size[0];
+                    stopy = starty + 1;
+                    stopz = startz + local_size[2];
+                    pack_ghosts(f, send_ghosts, depth, startx, starty, startz, stopx, stopy, stopz);
                     thisProxy(thisIndex.x - 1, thisIndex.y, thisIndex.z).receive_ghost(
-                        itercount, fname, UP, ghost_size, CkDeviceBuffer(send_ghosts[BACK], comm_stream));
+                        itercount, fname, FRONT, ghost_size, send_ghosts);
                 }
             }
             else
@@ -574,12 +558,6 @@ public:
             }
         }
     }
-    
-    void receive_ghost(int iter, uint8_t fname, int dir, int &size, double* &data, CkDeviceBufferPost *devicePost)
-    {
-        data = recv_ghosts[dir];
-        devicePost[0].cuda_stream = comm_stream;
-    }
 
     // TODO implement multiple fields in same message
     void process_ghost(uint8_t fname, int dir, int size, double* data)
@@ -587,8 +565,7 @@ public:
         //CkPrintf("Processing ghost at (%i, %i, %i) from %i\n", thisIndex.x, 
         //        thisIndex.y, thisIndex.z, dir);
         double start_recv = CkTimer();
-        int startx, starty, startz;
-        double* recv_ghost = recv_ghosts[dir];
+        int startx, starty, startz, stopx, stopy, stopz;
         double* f = fields[fname];
         int depth = ghost_depth[fname];
         if (ndims == 3)
@@ -600,8 +577,9 @@ public:
                     startx = 1;
                     starty = 1;
                     startz = 0;
-                    invoke_ud_unpacking_kernel(f, recv_ghost, depth, 
-                        startx, starty, startz, step[0], step[1], local_size, compute_stream);
+                    stopx = startx + local_size[0];
+                    stopy = starty + local_size[1];
+                    stopz = startz + 1;
                     break;
                 }
                 case UP:
@@ -609,8 +587,9 @@ public:
                     start_x = 1;
                     start_y = 1;
                     start_z = local_size[2] + 1;
-                    invoke_ud_unpacking_kernel(f, recv_ghost, depth, 
-                        startx, starty, startz, step[0], step[1], local_size, compute_stream);
+                    stopx = startx + local_size[0];
+                    stopy = starty + local_size[1];
+                    stopz = startz + 1;
                     break;
                 }
                 case LEFT:
@@ -618,8 +597,9 @@ public:
                     startx = 1;
                     starty = 0;
                     startz = 1;
-                    invoke_rl_unpacking_kernel(f, recv_ghost, depth, 
-                        startx, starty, startz, step[0], step[1], local_size, compute_stream);
+                    stopx = startx + local_size[0];
+                    stopy = starty + 1;
+                    stopz = startz + local_size[2];
                     break;
                 }
                 case RIGHT:
@@ -627,8 +607,9 @@ public:
                     startx = 1;
                     starty = local_size[0] + 1;
                     startz = 1;
-                    invoke_rl_unpacking_kernel(f, recv_ghost, depth, 
-                        startx, starty, startz, step[0], step[1], local_size, compute_stream);
+                    stopx = startx + local_size[0];
+                    stopy = starty + 1;
+                    stopz = startz + local_size[2];
                     break;
                 }
                 case FRONT:
@@ -636,8 +617,9 @@ public:
                     startx = local_size[1] + 1;
                     starty = 1;
                     startz = 1;
-                    invoke_fb_unpacking_kernel(f, recv_ghost, depth, 
-                        startx, starty, startz, step[0], step[1], local_size, compute_stream);
+                    stopx = startx + 1;
+                    stopy = starty + local_size[1];
+                    stopz = startz + local_size[2];
                     break;
                 }
                 case BACK:
@@ -645,11 +627,13 @@ public:
                     startx = 0;
                     starty = 1;
                     startz = 1;
-                    invoke_fb_unpacking_kernel(f, recv_ghost, depth, 
-                        startx, starty, startz, step[0], step[1], local_size, compute_stream);
+                    stopx = startx + 1;
+                    stopy = starty + local_size[1];
+                    stopz = startz + local_size[2];
                     break;
                 }
             }
+            unpack_ghosts(f, data, depth, startx, starty, startz, stopx, stopy, stopz);
         }
         else
         {

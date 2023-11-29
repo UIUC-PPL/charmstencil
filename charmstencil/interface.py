@@ -53,6 +53,9 @@ class DebugInterface(Interface):
     def __init__(self):
         pass
 
+    def initialize_stencil(self, stencil):
+        pass
+
     def delete_stencil(self, name):
         pass
 
@@ -76,8 +79,9 @@ class CCSInterface(Interface):
         cmd = to_bytes(self.client_id, 'B')
         #self.send_command_async(Handlers.disconnection_handler, cmd)
 
-    def sync_stencil(self, name):
-        cmd = to_bytes(name, 'B')
+    def sync_stencil(self, stencil):
+        cmd = to_bytes(stencil.name, 'B')
+        cmd += to_bytes(stencil.stencil_graph.epoch, 'I')
         res = self.send_command(Handlers.sync_handler, cmd)
 
     def delete_stencil(self, name):
@@ -102,6 +106,8 @@ class CCSInterface(Interface):
         cmd += to_bytes(len(stencil._fields), 'B')
         for i in range(len(stencil._fields)):
             cmd += to_bytes(stencil._fields[i].ghost_depth, 'I')
+        for b in stencil.boundary:
+            cmd += to_bytes(b, 'd')
         self.send_command(Handlers.create_handler, cmd)
 
     def evaluate_stencil(self, stencil):
