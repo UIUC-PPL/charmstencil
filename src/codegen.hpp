@@ -10,7 +10,7 @@
 #define FMT_HEADER_ONLY
 #include <fmt/format.h>
 
-typedef void* (*compute_fun_t)(double**, uint32_t*, int*, uint32_t*);
+typedef void* (*compute_fun_t)(double**, double**, uint32_t*, int*, uint32_t*);
 
 template<class T>
 inline T extract(char* &msg, bool increment=true)
@@ -205,7 +205,7 @@ size_t generate(char* cmd, uint32_t cmd_size, int ndims, std::vector<uint32_t> g
     fprintf(genfile, "#include <iostream>\n");
     fprintf(genfile, "#include <vector>\n\n");
     fprintf(genfile, "extern \"C\" {\n");
-    fprintf(genfile, "void compute_func(double** fields, "
+    fprintf(genfile, "void compute_func(double** lhs_fields, double** rhs_fields, "
             "uint32_t* num_chares, int* index, uint32_t* local_size) {\n");
 
     fprintf(genfile, "int start_idx[%i];\n", ndims);
@@ -300,7 +300,7 @@ void generate_code(FILE* genfile, char* &cmd, int ndims,
             // FIXME
             uint32_t depth = 1; //ghost_depth[fname];
 
-            fprintf(genfile, "double* f%" PRIu8 " = fields[%" PRIu8 "];\n", fname, fname);
+            fprintf(genfile, "double* f%" PRIu8 " = lhs_fields[%" PRIu8 "];\n", fname, fname);
 
             for(int i = 0; i < ndims; i++)
                 fprintf(genfile, "start_idx[%i] = index[%i] == 0 ? %i : %u;\n",
@@ -492,7 +492,7 @@ std::string generate_loop_rhs(FILE* genfile, char* &cmd, int ndims, uint32_t dep
                 case OperandType::field:
                 {
                     uint8_t fname = extract<uint8_t>(cmd);
-                    res = fmt::format("fields[{}]", fname);
+                    res = fmt::format("rhs_fields[{}]", fname);
                     break;
                 }
                 default:

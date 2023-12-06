@@ -136,7 +136,10 @@ class Stencil(object):
         self.active_graph = self.stencil_graph
         self._fields = self._create_fields(num_fields, **kwargs)
         self.interface.initialize_stencil(self)
-        return self._fields
+        if len(self._fields) == 1:
+            return self._fields[0]
+        else:
+            return self._fields
 
     def get_field_name(self):
         field_name = self._next_field_id
