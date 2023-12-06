@@ -5,7 +5,7 @@ from charmstencil.linalg import norm
 from charmstencil.stencil import Stencil, StencilNumpy
 from charmstencil.interface import DebugInterface, CCSInterface
 
-class Jacobi3D(Stencil):
+class Jacobi3D(StencilNumpy):
     def __init__(self, n, interface):
         self.x = self.initialize(
             n, interface=interface, max_epochs=1000, odf=2,
@@ -38,8 +38,8 @@ class Jacobi3D(Stencil):
 if __name__ == '__main__':
     #interface = DebugInterface()
     #pr = cProfile.Profile()
-    interface = CCSInterface("172.17.0.1", 10000)
-    #interface = None
+    #interface = CCSInterface("172.17.0.1", 10000)
+    interface = None
     grid = Jacobi3D((128, 128, 128), interface)
     #pr.enable()
     grid.solve(5)

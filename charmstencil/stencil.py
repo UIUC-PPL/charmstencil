@@ -214,3 +214,69 @@ class Stencil(object):
             f.flush()
         self.stencil_graph.flush()
 
+class StencilNumpy(Stencil):
+    def __init__(self, shape, num_fields, **kwargs):
+        """Stencil base class for numpy
+        """
+        self.initialize(shape, num_fields, **kwargs)
+
+    def __del__(self):
+        pass
+
+    def _call_iterate(self, *args, **kwargs):
+        return self.iterate(*args, **kwargs)
+
+    def _call_boundary(self, *args, **kwargs):
+        return self.boundary(*args, **kwargs)
+
+    def sync(self):
+        pass
+
+    def initialize(self, shape, num_fields, **kwargs):
+        max_epochs = kwargs.pop('max_epochs', 10)
+        self.odf = kwargs.pop('odf', 4)
+        self.boundary = kwargs.pop('boundary', [1.] * num_fields)
+        self.name = get_stencil_name()
+        self.num_fields = num_fields
+        self.shape = shape
+        self._next_field_id = 0
+        self._fields = []
+        self._allocated = False
+        self._fields = self._create_fields(num_fields, **kwargs)
+        if len(self._fields) == 1:
+            return self._fields[0]
+        else:
+            return self._fields
+
+    def get_field_name(self):
+        field_name = self._next_field_id
+        self._next_field_id += 1
+        return field_name
+
+    @final
+    def _create_field(self, **kwargs):
+        name = self.get_field_name()
+        f = np.zeros(self.shape, dtype=np.float64)
+        self._fields.append(f)
+        return f
+    
+    @final
+    def _create_fields(self, num_fields, **kwargs):
+        fields = []
+        for i in range(num_fields):
+            name = self.get_field_name()
+            f = np.zeros(self.shape, dtype=np.float64)
+            fields.append(f)
+        return fields
+
+    #args would be num_args and field_names right?
+    @final
+    def exchange_ghosts(self, *args):
+        pass
+
+    def evaluate(self):
+        pass
+
+    def flush(self):
+        pass
+
