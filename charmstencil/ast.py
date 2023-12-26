@@ -37,6 +37,7 @@ class CreateFieldNode(object):
 
 class FieldOperationNode(object):
     def __init__(self, operation, operands, save=False):
+        #print("OOPER")
         from charmstencil.stencil import Field
         self.opcode = OPCODES.get(operation)
         self.operands = operands

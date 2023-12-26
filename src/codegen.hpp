@@ -10,7 +10,7 @@
 #define FMT_HEADER_ONLY
 #include <fmt/format.h>
 
-typedef void* (*compute_fun_t)(double**, double**, uint32_t*, int*, uint32_t*);
+typedef void* (*compute_fun_t)(double**, uint32_t*, int*, uint32_t*);
 
 template<class T>
 inline T extract(char* &msg, bool increment=true)
@@ -205,12 +205,18 @@ size_t generate(char* cmd, uint32_t cmd_size, int ndims, std::vector<uint32_t> g
     fprintf(genfile, "#include <iostream>\n");
     fprintf(genfile, "#include <vector>\n\n");
     fprintf(genfile, "extern \"C\" {\n");
-    fprintf(genfile, "void compute_func(double** lhs_fields, double** rhs_fields, "
-            "uint32_t* num_chares, int* index, uint32_t* local_size) {\n");
+    fprintf(genfile, "void compute_func(double** fields, "
+            "uint32_t* num_chares, int* index, uint32_t* local_size, "
+            "uint32_t* total_size) {\n");
 
     fprintf(genfile, "int start_idx[%i];\n", ndims);
-    fprintf(genfile, "int stop_idx[%i];\n", ndims);
+    fprintf(genfile, "int stop_idx[%i];\n", ndims);    
+    fprintf(genfile, "int start_chare[%i];\n", ndims);
+    fprintf(genfile, "int stop_chare[%i];\n", ndims);
+    fprintf(genfile, "int local_start[%i];\n", ndims);
+    fprintf(genfile, "int local_stop[%i];\n", ndims);
     fprintf(genfile, "int step[%i];\n", ndims);
+    fprintf(genfile, "bool is_local = true;\n");
 
     // Add some prints for debugging
     //fprintf(genfile, "std::cout << \"Generated function called\\n\";\n");
@@ -300,16 +306,40 @@ void generate_code(FILE* genfile, char* &cmd, int ndims,
             // FIXME
             uint32_t depth = 1; //ghost_depth[fname];
 
-            fprintf(genfile, "double* f%" PRIu8 " = lhs_fields[%" PRIu8 "];\n", fname, fname);
+            fprintf(genfile, "double* f%" PRIu8 " = fields[%" PRIu8 "];\n", fname, fname);
+
+            for (int i = 0; i < ndims; i++)
+                fprintf(genfile, "start_chare[%i] = %i / local_size[%i];\n",
+                    i, key.index[i].start, i);
+
+            for (int i = 0; i < ndims; i++)
+                fprintf(genfile, "stop_chare[%i] = (total_size[%i] + %i) / local_size[%i];\n",
+                    i, i, key.index[i].stop, i);
+
+            for (int i = 0; i < ndims; i++)
+                fprintf(genfile, "is_local = is_local & (index[%i] >= start_chare[%i] &&"
+                " index[%i] <= stop_chare[%i]);\n",
+                    i, i, i, i);
+
+            fprintf(genfile, "if (is_local) {\n");
 
             for(int i = 0; i < ndims; i++)
-                fprintf(genfile, "start_idx[%i] = index[%i] == 0 ? %i : %u;\n",
-                    i, i, key.index[i].start + depth, depth);
+                fprintf(genfile, "local_start[%i] = %i % local_size[%i];\n",
+                    i, key.index[i].start, i);
+            
+            for(int i = 0; i < ndims; i++)
+                fprintf(genfile, "local_stop[%i] = (total_size[%i] + %i) % local_size[%i];\n",
+                    i, i, key.index[i].stop, i);
 
             for(int i = 0; i < ndims; i++)
-                fprintf(genfile, "stop_idx[%i] = index[%i] == num_chares[%i] - 1 ? "
-                    "local_size[%i] + %i : local_size[%i] + %u;\n",
-                    i, i, i, i, key.index[i].stop + depth, i, depth);
+                fprintf(genfile, "start_idx[%i] = index[%i] == start_chare[%i] ?"
+                " local_start[%i] + %u : %u;\n",
+                    i, i, i, depth, depth);
+
+            for(int i = 0; i < ndims; i++)
+                fprintf(genfile, "stop_idx[%i] = index[%i] == stop_chare[%i] ? "
+                    "local_stop[%i] + %u : local_size[%i] + %u;\n",
+                    i, i, i, i, depth, i, depth);
 
             // calculate local sizes with depth
             for(int i = 0; i < ndims; i++)
@@ -340,6 +370,8 @@ void generate_code(FILE* genfile, char* &cmd, int ndims,
 
             for (int i = 0; i < ndims; i++)
                 fprintf(genfile, "}\n");
+
+            fprintf(genfile, "}\n"); // for is_local
 
             generate_code(genfile, cmd, ndims, ghost_depth, local_size, num_chares, ghost_fields);
 
@@ -492,7 +524,7 @@ std::string generate_loop_rhs(FILE* genfile, char* &cmd, int ndims, uint32_t dep
                 case OperandType::field:
                 {
                     uint8_t fname = extract<uint8_t>(cmd);
-                    res = fmt::format("rhs_fields[{}]", fname);
+                    res = fmt::format("fields[{}]", fname);
                     break;
                 }
                 default:

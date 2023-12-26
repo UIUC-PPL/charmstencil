@@ -7,21 +7,21 @@ from charmstencil.interface import DebugInterface, CCSInterface
 
 class Jacobi3D(StencilNumpy):
     def __init__(self, n, interface):
-        self.x = self.initialize(
+        self.x, self.y = self.initialize(
             n, interface=interface, max_epochs=1000, odf=2,
-            num_fields=1)
+            num_fields=2)
         #self.apply_boundary(100.)
         self.itercount = 0
 
     def iterate(self, nsteps):
         self.exchange_ghosts(self.x)
-        self.x[1:-1, 1:-1, 1:-1] = (1. / 6) * (self.x[:-2, 1:-1, 1:-1] + self.x[2:, 1:-1, 1:-1] +
+        self.y[1:-1, 1:-1, 1:-1] = (1. / 6) * (self.x[:-2, 1:-1, 1:-1] + self.x[2:, 1:-1, 1:-1] +
                                                self.x[1:-1, :-2, 1:-1] + self.x[1:-1, 2:, 1:-1] +
                                                self.x[1:-1, 1:-1, :-2] + self.x[1:-1, 1:-1, 2:])
         #self.y1[1:-1, 1:-1, 1:-1] = (1. / 6) * (self.x1[:-2, 1:-1, 1:-1] + self.x1[2:, 1:-1, 1:-1] +
         #                                       self.x1[1:-1, :-2, 1:-1] + self.x1[1:-1, 2:, 1:-1] +
         #                                       self.x1[1:-1, 1:-1, :-2] + self.x1[1:-1, 1:-1, 2:])
-        #self.x, self.y = self.y, self.x
+        self.x, self.y = self.y, self.x
         #self.x1, self.y1 = self.y1, self.x1
         self.itercount += 1
         if self.itercount % nsteps == 0:

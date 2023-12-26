@@ -122,8 +122,6 @@ public:
     bool is_gpu;
     
     double** fields;
-    double** lhs_fields;
-    double** rhs_fields;
     //std::vector<double*> fields;
     std::vector<uint32_t> ghost_depth;  // stores the depth of the ghosts corresponding to each field
 
@@ -380,8 +378,7 @@ public:
 
             //CkPrintf("Local size = %i, %i, %i\n", local_size[0], local_size[1], local_size[2]);
 
-            compute_f(lhs_fields, rhs_fields, num_chares, index, local_size);
-            std::swap(lhs_fields, rhs_fields);
+            compute_f(fields, num_chares, index, local_size);
             //comp_time += (CkTimer() - start_comp);
         }
 
@@ -395,14 +392,12 @@ public:
     {
         num_fields = num_fields_;
         //fields.resize(num_fields);
-        fields = (double**) malloc(sizeof(double*) * 2 * num_fields);
-        ghost_depth.resize(2 * num_fields);
-        rhs_fields = fields;
-        lhs_fields = fields + num_fields;
-        for (uint8_t fname = 0; fname < 2 * num_fields; fname++)
+        fields = (double**) malloc(sizeof(double*) * num_fields);
+        ghost_depth.resize(num_fields);
+        for (uint8_t fname = 0; fname < num_fields; fname++)
         {
-            double bc = boundary_[fname % num_fields];
-            uint32_t depth = ghost_depth_[fname % num_fields];
+            double bc = boundary_[fname];
+            uint32_t depth = ghost_depth_[fname];
             uint32_t total_local_size = 1;
 #ifndef NDEBUG
             CkPrintf("Create field %" PRIu8 " with depth %" PRIu8 " bc %f\n", 

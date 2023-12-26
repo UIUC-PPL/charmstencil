@@ -51,6 +51,7 @@ class Field(object):
 
     def __add__(self, other):
         node = FieldOperationNode('+', [self, other])
+        print("returning")
         return Field(self.name, self.shape, self.stencil,
                      graph=node)
 
@@ -60,6 +61,7 @@ class Field(object):
                      graph=node)
 
     def __mul__(self, other):
+        print("MUL")
         node = FieldOperationNode('*', [self, other])
         return Field(self.name, self.shape, self.stencil,
                      graph=node)
@@ -92,8 +94,11 @@ class Stencil(object):
         self.interface.delete_stencil(self.name)
 
     def _call_iterate(self, *args, **kwargs):
+        print("CHECK")
         self.active_graph, prev_graph = self._iterate_graph, self.active_graph
+        print("DONE")
         ret = self.iterate(*args, **kwargs)
+        print("DONE2")
         self._iterate_graph = IterateGraph()
         if not self.active_graph.is_empty():
             self.stencil_graph.insert(self.active_graph)
