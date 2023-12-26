@@ -334,7 +334,7 @@ void generate_code(FILE* genfile, char* &cmd, int ndims,
             for(int i = 0; i < ndims; i++)
                 fprintf(genfile, "start_idx[%i] = index[%i] == start_chare[%i] ?"
                 " local_start[%i] + %u : %u;\n",
-                    i, i, i, depth, depth);
+                    i, i, i, i, depth, depth);
 
             for(int i = 0; i < ndims; i++)
                 fprintf(genfile, "stop_idx[%i] = index[%i] == stop_chare[%i] ? "
