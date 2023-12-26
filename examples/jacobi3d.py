@@ -1,4 +1,5 @@
 import numpy as np
+import sys
 import time
 import cProfile
 from charmstencil.linalg import norm
@@ -35,7 +36,7 @@ class Jacobi3D(Stencil):
 if __name__ == '__main__':
     #interface = DebugInterface()
     #pr = cProfile.Profile()
-    interface = CCSInterface("172.17.0.1", 10000)
+    interface = CCSInterface(sys.argv[1], 1234)
     #interface = None
     grid = Jacobi3D((128, 128, 128), interface)
     #pr.enable()
