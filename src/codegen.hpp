@@ -324,11 +324,11 @@ void generate_code(FILE* genfile, char* &cmd, int ndims,
             fprintf(genfile, "if (is_local) {\n");
 
             for(int i = 0; i < ndims; i++)
-                fprintf(genfile, "local_start[%i] = %i % local_size[%i];\n",
+                fprintf(genfile, "local_start[%i] = %i %% local_size[%i];\n",
                     i, key.index[i].start, i);
             
             for(int i = 0; i < ndims; i++)
-                fprintf(genfile, "local_stop[%i] = (total_size[%i] + %i) % local_size[%i];\n",
+                fprintf(genfile, "local_stop[%i] = (total_size[%i] + %i) %% local_size[%i];\n",
                     i, i, key.index[i].stop, i);
 
             for(int i = 0; i < ndims; i++)

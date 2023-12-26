@@ -18,9 +18,6 @@ class Jacobi3D(Stencil):
         self.y[1:-1, 1:-1, 1:-1] = (1. / 6) * (self.x[:-2, 1:-1, 1:-1] + self.x[2:, 1:-1, 1:-1] +
                                                self.x[1:-1, :-2, 1:-1] + self.x[1:-1, 2:, 1:-1] +
                                                self.x[1:-1, 1:-1, :-2] + self.x[1:-1, 1:-1, 2:])
-        #self.y1[1:-1, 1:-1, 1:-1] = (1. / 6) * (self.x1[:-2, 1:-1, 1:-1] + self.x1[2:, 1:-1, 1:-1] +
-        #                                       self.x1[1:-1, :-2, 1:-1] + self.x1[1:-1, 2:, 1:-1] +
-        #                                       self.x1[1:-1, 1:-1, :-2] + self.x1[1:-1, 1:-1, 2:])
         self.x, self.y = self.y, self.x
         #self.x1, self.y1 = self.y1, self.x1
         self.itercount += 1
