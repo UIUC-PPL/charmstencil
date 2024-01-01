@@ -308,13 +308,17 @@ void generate_code(FILE* genfile, char* &cmd, int ndims,
 
             fprintf(genfile, "double* f%" PRIu8 " = fields[%" PRIu8 "];\n", fname, fname);
 
-            for (int i = 0; i < ndims; i++)
+            for (int i = 0; i < ndims; i++) {
                 fprintf(genfile, "start_chare[%i] = %i / local_size[%i];\n",
                     i, key.index[i].start, i);
+                fprintf(genfile, "printf(\"start = %%i\\n\", start_chare[%i])", i);
+            }
 
-            for (int i = 0; i < ndims; i++)
+            for (int i = 0; i < ndims; i++) {
                 fprintf(genfile, "stop_chare[%i] = (total_size[%i] + %i) / local_size[%i];\n",
                     i, i, key.index[i].stop, i);
+                fprintf(genfile, "printf(\"stop = %%i\\n\", stop_chare[%i])", i);
+            }
 
             for (int i = 0; i < ndims; i++)
                 fprintf(genfile, "is_local = is_local & (index[%i] >= start_chare[%i] &&"
@@ -332,8 +336,8 @@ void generate_code(FILE* genfile, char* &cmd, int ndims,
                     i, i, key.index[i].stop, i);
 
             for(int i = 0; i < ndims; i++)
-                fprintf(genfile, "start_idx[%i] = index[%i] == start_chare[%i] ?"
-                " local_start[%i] + %u : %u;\n",
+                fprintf(genfile, "start_idx[%i] = index[%i] == start_chare[%i] ? "
+                "local_start[%i] + %u : %u;\n",
                     i, i, i, i, depth, depth);
 
             for(int i = 0; i < ndims; i++)
