@@ -15,6 +15,8 @@ class Jacobi3D(Stencil):
         self.itercount = 0
 
     def iterate(self, nsteps):
+        if self.itercount == 0:
+            self.boundary()
         self.exchange_ghosts(self.x)
         self.y[1:-1, 1:-1, 1:-1] = (1. / 6) * (self.x[:-2, 1:-1, 1:-1] + self.x[2:, 1:-1, 1:-1] +
                                                self.x[1:-1, :-2, 1:-1] + self.x[1:-1, 2:, 1:-1] +
@@ -28,10 +30,12 @@ class Jacobi3D(Stencil):
             return True
 
     def boundary(self, bc):
-        self.x[0, :] = self.y[0, :] = bc
-        self.x[-1, :] = self.y[-1, :] = bc
-        self.x[:, 0] = self.y[:, 0] = bc
-        self.x[:, -1] = self.y[:, -1] = bc
+        self.x[0, :, :] = self.y[0, :, :] = bc
+        self.x[-1, :, :] = self.y[-1, :, :] = bc
+        self.x[:, 0, :] = self.y[:, 0, :] = bc
+        self.x[:, -1, :] = self.y[:, -1, :] = bc
+        self.x[:, :, 0] = self.y[:, :, 0] = bc
+        self.x[:, :, -1] = self.y[:, :, -1] = bc
 
 if __name__ == '__main__':
     #interface = DebugInterface()
@@ -41,7 +45,7 @@ if __name__ == '__main__':
     grid = Jacobi3D((128, 128, 128), interface)
     #pr.enable()
     grid.solve(5)
-    print("Test")
+    #print("Test")
     grid.sync()
     print("Warm up done")
     start = time.time()

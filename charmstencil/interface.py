@@ -71,7 +71,7 @@ class CCSInterface(Interface):
         self.server = Server(server_ip, server_port)
         self.server.connect()
         self.client_id = self.send_command(Handlers.connection_handler, '')
-        print(self.client_id)
+        #print(self.client_id)
 
     def __del__(self):
         self.disconnect()
