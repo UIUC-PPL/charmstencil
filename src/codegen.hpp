@@ -10,7 +10,7 @@
 #define FMT_HEADER_ONLY
 #include <fmt/format.h>
 
-typedef void* (*compute_fun_t)(double**, uint32_t*, int*, uint32_t*);
+typedef void* (*compute_fun_t)(double**, uint32_t*, int*, uint32_t*, uint32_t*);
 
 template<class T>
 inline T extract(char* &msg, bool increment=true)
