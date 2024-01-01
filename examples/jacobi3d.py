@@ -16,7 +16,7 @@ class Jacobi3D(Stencil):
 
     def iterate(self, nsteps):
         if self.itercount == 0:
-            self.boundary()
+            self.boundary(100)
         self.exchange_ghosts(self.x)
         self.y[1:-1, 1:-1, 1:-1] = (1. / 6) * (self.x[:-2, 1:-1, 1:-1] + self.x[2:, 1:-1, 1:-1] +
                                                self.x[1:-1, :-2, 1:-1] + self.x[1:-1, 2:, 1:-1] +
