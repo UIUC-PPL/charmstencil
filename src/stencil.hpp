@@ -378,7 +378,7 @@ public:
 
             //CkPrintf("Local size = %i, %i, %i\n", local_size[0], local_size[1], local_size[2]);
 
-            compute_f(fields, num_chares, index, local_size, total_size);
+            compute_f(fields, num_chares, index, local_size, dims);
             //comp_time += (CkTimer() - start_comp);
         }
 
