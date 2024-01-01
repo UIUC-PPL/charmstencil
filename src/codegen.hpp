@@ -311,13 +311,13 @@ void generate_code(FILE* genfile, char* &cmd, int ndims,
             for (int i = 0; i < ndims; i++) {
                 fprintf(genfile, "start_chare[%i] = %i / local_size[%i];\n",
                     i, key.index[i].start, i);
-                fprintf(genfile, "printf(\"start = %%i\\n\", start_chare[%i]);\n", i);
+                //fprintf(genfile, "printf(\"start = %%i\\n\", start_chare[%i]);\n", i);
             }
 
             for (int i = 0; i < ndims; i++) {
                 fprintf(genfile, "stop_chare[%i] = (total_size[%i] + %i) / local_size[%i];\n",
                     i, i, key.index[i].stop, i);
-                fprintf(genfile, "printf(\"stop = %%i\\n\", stop_chare[%i]);\n", i);
+                //fprintf(genfile, "printf(\"stop = %%i\\n\", stop_chare[%i]);\n", i);
             }
 
             for (int i = 0; i < ndims; i++)
