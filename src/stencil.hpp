@@ -315,7 +315,7 @@ public:
                 else
                 {
                     num_ghost_recv = 0;
-                    call_compute(gid);
+                    call_compute(curr_gid);
                     run_next_iteration();
                 }
             }
