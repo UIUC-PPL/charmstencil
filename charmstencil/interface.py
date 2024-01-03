@@ -62,6 +62,9 @@ class DebugInterface(Interface):
     def evaluate_stencil(self, stencil):
         stencil.stencil_graph.plot()
 
+    def sync_stencil(self, stencil):
+        pass
+
     def get(self, stencil_name, field_name):
         return None
 

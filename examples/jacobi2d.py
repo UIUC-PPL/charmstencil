@@ -18,13 +18,13 @@ class Jacobi2D(Stencil):
         if self.boundary_iter:
             self.boundary(100.)
             self.boundary_iter = False
-            return False
+            return True
         self.exchange_ghosts(self.x)
         self.y[1:-1, 1:-1] = 0.25 * (self.x[:-2, 1:-1] + self.x[2:, 1:-1] +
                                      self.x[1:-1, :-2] + self.x[1:-1, 2:])
         self.x, self.y = self.y, self.x
         self.itercount += 1
-        return self.itercount == nsteps
+        return self.itercount != nsteps
 
     def boundary(self, bc):
         self.x[0, :] = self.y[0, :] = bc
