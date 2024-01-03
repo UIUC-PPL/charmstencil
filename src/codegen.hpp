@@ -302,7 +302,9 @@ void generate_code(FILE* genfile, char* &cmd, int ndims,
             uint8_t fname_optype = extract<uint8_t>(cmd);
             uint8_t fname = extract<uint8_t>(cmd);
             Slice key = get_slice(cmd, ndims, num_chares, local_size);
-            CkPrintf("%i, %i, %i\n", key.index[0].start, key.index[0].stop, key.index[0].step);
+            for (int i = 0; i < ndims; i++)
+                CkPrintf("%i, %i, %i\n", key.index[i].start, key.index[i].stop, key.index[i].step);
+            CkPrintf("\n");
 
             // FIXME
             uint32_t depth = 1; //ghost_depth[fname];
