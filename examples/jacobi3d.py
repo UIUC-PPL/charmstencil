@@ -17,7 +17,7 @@ class Jacobi3D(Stencil):
 
     def iterate(self, nsteps):
         if self.boundary_iter:
-            self.bc(100)
+            self.bc(100.)
             self.boundary_iter = False
             return False
         self.exchange_ghosts(self.x)

@@ -309,7 +309,7 @@ void generate_code(FILE* genfile, char* &cmd, int ndims,
             // FIXME
             uint32_t depth = 1; //ghost_depth[fname];
 
-            fprintf(genfile, "double* f%" PRIu8 " = fields[%" PRIu8 "];\n", fname, fname);
+            //fprintf(genfile, "double* f%" PRIu8 " = fields[%" PRIu8 "];\n", fname, fname);
 
             for (int i = 0; i < ndims; i++) {
                 fprintf(genfile, "start_chare[%i] = %i / local_size[%i];\n",
@@ -372,7 +372,7 @@ void generate_code(FILE* genfile, char* &cmd, int ndims,
 
             //fprintf(genfile, "count++;\n");
 
-            fprintf(genfile, "f%i[%s] = %s;\n", fname, index_str.c_str(), 
+            fprintf(genfile, "fields[%i][%s] = %s;\n", fname, index_str.c_str(), 
                     generate_loop_rhs(genfile, cmd, ndims, depth, local_size, num_chares, key).c_str());
 
             for (int i = 0; i < ndims; i++)
