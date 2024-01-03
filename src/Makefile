@@ -1,4 +1,4 @@
-CHARMDIR=/home/adityapb/charm/charm
+CHARMDIR=/u/bhosale/charm_cpu
 CHARMC=$(CHARMDIR)/mpi-linux-x86_64/bin/charmc
 CHARM_INC=-I$(CHARMDIR)/include
 OPTS=-c++-option -std=c++17 -O3 -g -ldl -I/u/bhosale/fmt/include -DNDEBUG

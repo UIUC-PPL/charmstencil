@@ -304,10 +304,11 @@ public:
             {
                 // FIXME handle multiple fields
                 size_t num_ghost_fields = extract<size_t>(graph);
+                //CkPrintf("Num ghosts read = %lu\n", num_ghost_fields);
                 std::vector<uint8_t> fnames;
                 for (int i = 0; i < num_ghost_fields; i++)
                     fnames.push_back(extract<uint8_t>(graph));
-                if (fnames.size() > 0)
+                if (num_ghost_fields > 0)
                 {
                     send_ghost_data(fnames);
                     thisProxy(thisIndex.x, thisIndex.y, thisIndex.z).iterate(curr_gid);
@@ -367,11 +368,12 @@ public:
             size_t num_ghost_fields = extract<size_t>(graph);
             if (num_ghost_fields > 1)
                 CkAbort("Not implemented");
-            uint8_t fname = extract<uint8_t>(graph);
+            if (num_ghost_fields == 1)
+                uint8_t fname = extract<uint8_t>(graph);
 
             compute_fun_t compute_f;
             size_t hash = extract<size_t>(graph);
-            CkPrintf("lookup hash = %lu\n", hash);
+            //CkPrintf("lookup hash = %lu\n", hash);
 
             // first check local cache
             auto find = fun_cache.find(hash);
