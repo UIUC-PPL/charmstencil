@@ -5,6 +5,7 @@
 
 
 #define IDX3D(x, y, z, step) ((x) + (y) * (step)[0] + (z) * (step)[0] * (step)[1])
+#define IDX2D(x, y, step) ((x) + (y) * (step)[0])
 
 #define BACK 0
 #define FRONT 1
@@ -306,8 +307,17 @@ public:
                 std::vector<uint8_t> fnames;
                 for (int i = 0; i < num_ghost_fields; i++)
                     fnames.push_back(extract<uint8_t>(graph));
-                send_ghost_data(fnames);
-                thisProxy(thisIndex.x, thisIndex.y, thisIndex.z).iterate(curr_gid);
+                if (fnames.size() > 0)
+                {
+                    send_ghost_data(fnames);
+                    thisProxy(thisIndex.x, thisIndex.y, thisIndex.z).iterate(curr_gid);
+                }
+                else
+                {
+                    num_ghost_recv = 0;
+                    call_compute(gid);
+                    run_next_iteration();
+                }
             }
         }
         else
@@ -441,7 +451,7 @@ public:
         }
     }
 
-    void pack_ghosts(double* f, double* gh, int depth, int startx, int starty, int startz,
+    void pack_ghosts3d(double* f, double* gh, int depth, int startx, int starty, int startz,
         int stopx, int stopy, int stopz)
     {
         int i = 0;
@@ -451,7 +461,16 @@ public:
                     gh[i++] = f[IDX3D(x, y, z, step)];
     }
 
-    void unpack_ghosts(double* f, double* gh, int depth, int startx, int starty, int startz,
+    void pack_ghosts2d(double* f, double* gh, int depth, int startx, int starty,
+        int stopx, int stopy)
+    {
+        int i = 0;
+        for(int x = startx; x < stopx; x++)
+            for(int y = starty; y < stopy; y++)
+                gh[i++] = f[IDX2D(x, y, step)];
+    }
+
+    void unpack_ghosts3d(double* f, double* gh, int depth, int startx, int starty, int startz,
         int stopx, int stopy, int stopz)
     {
         int i = 0;
@@ -459,6 +478,15 @@ public:
             for(int y = starty; y < stopy; y++)
                 for(int z = startz; z < stopz; z++)
                     f[IDX3D(x, y, z, step)] = gh[i++];
+    }
+
+    void unpack_ghosts2d(double* f, double* gh, int depth, int startx, int starty,
+        int stopx, int stopy)
+    {
+        int i = 0;
+        for(int x = startx; x < stopx; x++)
+            for(int y = starty; y < stopy; y++)
+                f[IDX2D(x, y, step)] = gh[i++];
     }
 
     // FIXME doesn't do diagonal neighbors
@@ -552,6 +580,52 @@ public:
                         itercount, fname, FRONT, ghost_size, send_ghosts);
                 }
             }
+            else if (ndims == 2)
+            {
+                // FIXME different sizes in different dimensions
+                double* f = fields[fname];
+
+                if (!bounds[LEFT])
+                {
+                    startx = 1;
+                    starty = 1;
+                    stopx = startx + 1;
+                    stopy = starty + local_size[1];
+                    pack_ghosts2d(f, send_ghosts, depth, startx, starty, stopx, stopy);
+                    thisProxy(thisIndex.x, thisIndex.y - 1, thisIndex.z).receive_ghost(
+                        itercount, fname, RIGHT, ghost_size, send_ghosts);
+                }
+                if (!bounds[RIGHT])
+                {
+                    startx = local_size[0];
+                    starty = 1;
+                    stopx = startx + 1;
+                    stopy = starty + local_size[1];
+                    pack_ghosts2d(f, send_ghosts, depth, startx, starty, stopx, stopy);
+                    thisProxy(thisIndex.x, thisIndex.y + 1, thisIndex.z).receive_ghost(
+                        itercount, fname, LEFT, ghost_size, send_ghosts);
+                }
+                if (!bounds[FRONT])
+                {
+                    startx = 1;
+                    starty = 1;
+                    stopx = startx + local_size[0];
+                    stopy = starty + 1;
+                    pack_ghosts2d(f, send_ghosts, depth, startx, starty, stopx, stopy);
+                    thisProxy(thisIndex.x + 1, thisIndex.y, thisIndex.z).receive_ghost(
+                        itercount, fname, BACK, ghost_size, send_ghosts);
+                }
+                if (!bounds[BACK])
+                {
+                    startx = 1;
+                    starty = local_size[1];
+                    stopx = startx + local_size[0];
+                    stopy = starty + 1;
+                    pack_ghosts2d(f, send_ghosts, depth, startx, starty, stopx, stopy);
+                    thisProxy(thisIndex.x - 1, thisIndex.y, thisIndex.z).receive_ghost(
+                        itercount, fname, FRONT, ghost_size, send_ghosts);
+                }
+            }
             else
             {
                 CkAbort("Not implemented");
@@ -633,7 +707,46 @@ public:
                     break;
                 }
             }
-            unpack_ghosts(f, data, depth, startx, starty, startz, stopx, stopy, stopz);
+            unpack_ghosts3d(f, data, depth, startx, starty, startz, stopx, stopy, stopz);
+        }
+        else if (ndims == 2)
+        {
+            switch (dir)
+            {
+                case LEFT:
+                {
+                    startx = 1;
+                    starty = 0;
+                    stopx = startx + local_size[0];
+                    stopy = starty + 1;
+                    break;
+                }
+                case RIGHT:
+                {
+                    startx = 1;
+                    starty = local_size[0] + 1;
+                    stopx = startx + local_size[0];
+                    stopy = starty + 1;
+                    break;
+                }
+                case FRONT:
+                {
+                    startx = local_size[1] + 1;
+                    starty = 1;
+                    stopx = startx + 1;
+                    stopy = starty + local_size[1];
+                    break;
+                }
+                case BACK:
+                {
+                    startx = 0;
+                    starty = 1;
+                    stopx = startx + 1;
+                    stopy = starty + local_size[1];
+                    break;
+                }
+            }
+            unpack_ghosts2d(f, data, depth, startx, starty, stopx, stopy);
         }
         else
         {
