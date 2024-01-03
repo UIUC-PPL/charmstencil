@@ -515,7 +515,7 @@ public:
                     stopx = startx + local_size[0];
                     stopy = starty + local_size[1];
                     stopz = startz + 1;
-                    pack_ghosts(f, send_ghosts, depth, startx, starty, startz, stopx, stopy, stopz);
+                    pack_ghosts3d(f, send_ghosts, depth, startx, starty, startz, stopx, stopy, stopz);
                     thisProxy(thisIndex.x, thisIndex.y, thisIndex.z - 1).receive_ghost(
                         itercount, fname, UP, ghost_size, send_ghosts);
                 }
@@ -527,7 +527,7 @@ public:
                     stopx = startx + local_size[0];
                     stopy = starty + local_size[1];
                     stopz = startz + 1;
-                    pack_ghosts(f, send_ghosts, depth, startx, starty, startz, stopx, stopy, stopz);
+                    pack_ghosts3d(f, send_ghosts, depth, startx, starty, startz, stopx, stopy, stopz);
                     thisProxy(thisIndex.x, thisIndex.y, thisIndex.z + 1).receive_ghost(
                         itercount, fname, DOWN, ghost_size, send_ghosts);
                 }
@@ -539,7 +539,7 @@ public:
                     stopx = startx + 1;
                     stopy = starty + local_size[1];
                     stopz = startz + local_size[2];
-                    pack_ghosts(f, send_ghosts, depth, startx, starty, startz, stopx, stopy, stopz);
+                    pack_ghosts3d(f, send_ghosts, depth, startx, starty, startz, stopx, stopy, stopz);
                     thisProxy(thisIndex.x, thisIndex.y - 1, thisIndex.z).receive_ghost(
                         itercount, fname, RIGHT, ghost_size, send_ghosts);
                 }
@@ -551,7 +551,7 @@ public:
                     stopx = startx + 1;
                     stopy = starty + local_size[1];
                     stopz = startz + local_size[2];
-                    pack_ghosts(f, send_ghosts, depth, startx, starty, startz, stopx, stopy, stopz);
+                    pack_ghosts3d(f, send_ghosts, depth, startx, starty, startz, stopx, stopy, stopz);
                     thisProxy(thisIndex.x, thisIndex.y + 1, thisIndex.z).receive_ghost(
                         itercount, fname, LEFT, ghost_size, send_ghosts);
                 }
@@ -563,7 +563,7 @@ public:
                     stopx = startx + local_size[0];
                     stopy = starty + 1;
                     stopz = startz + local_size[2];
-                    pack_ghosts(f, send_ghosts, depth, startx, starty, startz, stopx, stopy, stopz);
+                    pack_ghosts3d(f, send_ghosts, depth, startx, starty, startz, stopx, stopy, stopz);
                     thisProxy(thisIndex.x + 1, thisIndex.y, thisIndex.z).receive_ghost(
                         itercount, fname, BACK, ghost_size, send_ghosts);
                 }
@@ -575,7 +575,7 @@ public:
                     stopx = startx + local_size[0];
                     stopy = starty + 1;
                     stopz = startz + local_size[2];
-                    pack_ghosts(f, send_ghosts, depth, startx, starty, startz, stopx, stopy, stopz);
+                    pack_ghosts3d(f, send_ghosts, depth, startx, starty, startz, stopx, stopy, stopz);
                     thisProxy(thisIndex.x - 1, thisIndex.y, thisIndex.z).receive_ghost(
                         itercount, fname, FRONT, ghost_size, send_ghosts);
                 }
