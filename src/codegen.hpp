@@ -319,7 +319,7 @@ void generate_code(FILE* genfile, char* &cmd, int ndims,
 
             for (int i = 0; i < ndims; i++) {
                 fprintf(genfile, "stop_chare[%i] = %i / local_size[%i];\n",
-                    i, i, key.index[i].stop, i);
+                    i, key.index[i].stop, i);
                 //fprintf(genfile, "printf(\"stop = %%i\\n\", stop_chare[%i]);\n", i);
             }
 
@@ -336,7 +336,7 @@ void generate_code(FILE* genfile, char* &cmd, int ndims,
             
             for(int i = 0; i < ndims; i++)
                 fprintf(genfile, "local_stop[%i] = %i %% local_size[%i];\n",
-                    i, i, key.index[i].stop, i);
+                    i, key.index[i].stop, i);
 
             for(int i = 0; i < ndims; i++)
                 fprintf(genfile, "start_idx[%i] = index[%i] == start_chare[%i] ? "

@@ -41,9 +41,9 @@ class Jacobi3D(Stencil):
         self.x[:, :, -1] = self.y[:, :, -1] = bc
 
 if __name__ == '__main__':
-    interface = DebugInterface()
+    #interface = DebugInterface()
     #pr = cProfile.Profile()
-    #interface = CCSInterface(sys.argv[1], 1234)
+    interface = CCSInterface(sys.argv[1], 1234)
     #interface = None
     grid = Jacobi3D((128, 128, 128), interface)
     #pr.enable()
