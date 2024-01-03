@@ -107,8 +107,6 @@ class CCSInterface(Interface):
         cmd += to_bytes(len(stencil._fields), 'B')
         for i in range(len(stencil._fields)):
             cmd += to_bytes(stencil._fields[i].ghost_depth, 'I')
-        for b in stencil.boundary:
-            cmd += to_bytes(b, 'd')
         self.send_command(Handlers.create_handler, cmd)
 
     def evaluate_stencil(self, stencil):

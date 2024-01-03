@@ -14,7 +14,7 @@ module stencil
     array [3D] Stencil
     {
         entry Stencil(uint8_t name_, uint32_t ndims_, uint32_t dims_[ndims_], uint32_t odf_,
-        uint8_t num_fields_, uint32_t ghost_depth_[num_fields_], double boundary_[num_fields_]);
+        uint8_t num_fields_, uint32_t ghost_depth_[num_fields_]);
             
         entry void receive_graph(uint32_t epoch, int size, char cmd[size]);
 
@@ -32,9 +32,9 @@ module stencil
 
         entry [threaded] void wait(ck::future<bool> done, uint32_t last_epoch);
 
-        entry void iterate(uint8_t gid)
+        entry void iterate(uint8_t gid, size_t num_ghost_fields)
         {
-            while (num_ghost_recv < num_nbrs)
+            while (num_ghost_recv < num_nbrs * num_ghost_fields)
             {
                 when receive_ghost[itercount](int iter, uint8_t fname, int dir, int size, double data[size])
                     serial "process_ghost" {

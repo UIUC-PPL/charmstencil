@@ -62,14 +62,14 @@ public:
     }
 
     static CProxy_Stencil lookup_or_create(uint8_t name, uint32_t ndims, uint32_t* dims, 
-            uint32_t odf, uint8_t num_fields, uint32_t* ghost_depth, double* boundary)
+            uint32_t odf, uint8_t num_fields, uint32_t* ghost_depth)
     {
         CProxy_Stencil* st = lookup(name);
 
         if (st == nullptr)
         {
             CProxy_Stencil proxy = create_stencil(name, ndims, dims, odf, 
-                num_fields, ghost_depth, boundary);
+                num_fields, ghost_depth);
             stencil_params.emplace(name, StencilParams(
                 ndims, dims, num_fields, odf, ghost_depth));
             return proxy;
@@ -126,13 +126,10 @@ public:
         uint8_t odf = extract<uint8_t>(cmd);
         uint8_t num_fields = extract<uint8_t>(cmd);
         uint32_t ghost_depth[num_fields];
-        double boundary[num_fields];
         for (int i = 0; i < num_fields; i++)
             ghost_depth[i] = extract<uint32_t>(cmd);
-        for (int i = 0; i < num_fields; i++)
-            boundary[i] = extract<double>(cmd);
         CProxy_Stencil st = lookup_or_create(name, ndims, dims, odf,
-            num_fields, ghost_depth, boundary);
+            num_fields, ghost_depth);
         uint8_t ret = 1;
         CcsSendReply(1, (void*) &ret);
     }
@@ -266,7 +263,7 @@ public:
     }
 
     static CProxy_Stencil create_stencil(uint8_t name, uint32_t ndims, uint32_t* dims, 
-            uint32_t odf, uint8_t num_fields, uint32_t* ghost_depth, double* boundary)
+            uint32_t odf, uint8_t num_fields, uint32_t* ghost_depth)
     {
         uint32_t num_chare_x, num_chare_y, num_chare_z;
         num_chare_x = num_chare_y = num_chare_z = 1;
@@ -294,7 +291,7 @@ public:
 
         CProxy_Stencil new_stencil = CProxy_Stencil::ckNew(
                 name, ndims, dims, odf, num_fields,
-                ghost_depth, boundary, num_chare_x, num_chare_y, num_chare_z);
+                ghost_depth, num_chare_x, num_chare_y, num_chare_z);
         insert(name, new_stencil);
         return new_stencil;
     }

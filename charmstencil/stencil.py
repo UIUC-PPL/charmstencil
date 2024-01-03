@@ -128,7 +128,6 @@ class Stencil(object):
         self.interface = kwargs.pop('interface', DummyInterface())
         max_epochs = kwargs.pop('max_epochs', 10)
         self.odf = kwargs.pop('odf', 4)
-        self.boundary = kwargs.pop('boundary', [1.] * num_fields)
         self.name = get_stencil_name()
         self.num_fields = num_fields
         self.shape = shape
@@ -240,7 +239,6 @@ class StencilNumpy(Stencil):
     def initialize(self, shape, num_fields, **kwargs):
         max_epochs = kwargs.pop('max_epochs', 10)
         self.odf = kwargs.pop('odf', 4)
-        self.boundary = kwargs.pop('boundary', [1.] * num_fields)
         self.name = get_stencil_name()
         self.num_fields = num_fields
         self.shape = shape

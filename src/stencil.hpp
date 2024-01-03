@@ -143,7 +143,7 @@ public:
     double* send_ghosts;
 
     Stencil(uint8_t name_, uint32_t ndims_, uint32_t* dims_, uint32_t odf_,
-        uint8_t num_fields_, uint32_t* ghost_depth_, double* boundary_)
+        uint8_t num_fields_, uint32_t* ghost_depth_)
         : EPOCH(0)
         , name(name_)
         , ndims(ndims_)
@@ -162,6 +162,9 @@ public:
         index[0] = thisIndex.x;
         index[1] = thisIndex.y;
         index[2] = thisIndex.z;
+
+        for (int i = 0; i < 3; i++)
+            dims[i] = 0;
 
         for (int i = 0; i < ndims; i++)
         {
@@ -187,9 +190,8 @@ public:
             num_chares[2] = cbrt(total_chares); //std::min(odf, dims[1]);
         }
 
-        local_size[0] = dims[0] / num_chares[0];
-        local_size[1] = dims[1] / num_chares[1];
-        local_size[2] = dims[2] / num_chares[2];
+        for (int i = 0; i < ndims; i++)
+            local_size[i] = dims[i] / num_chares[i];
 
         // internal chares
         for (int i = 0; i < ndims; i++)
@@ -214,7 +216,7 @@ public:
         for (int i = 0; i < ndims; i++)
             step[i] = local_size[i] + 2 * ghost_depth_[0];
 
-        create_fields(num_fields_, ghost_depth_, boundary_);
+        create_fields(num_fields_, ghost_depth_);
 
         // FIXME fix non cube decompositions
         ghost_size = ghost_depth[0] * local_size[0] * local_size[0];
@@ -311,7 +313,7 @@ public:
                 if (num_ghost_fields > 0)
                 {
                     send_ghost_data(fnames);
-                    thisProxy(thisIndex.x, thisIndex.y, thisIndex.z).iterate(curr_gid);
+                    thisProxy(thisIndex.x, thisIndex.y, thisIndex.z).iterate(curr_gid, num_ghost_fields);
                 }
                 else
                 {
@@ -331,7 +333,6 @@ public:
             itercmd = nullptr;
             ++EPOCH;
 #ifndef NDEBUG
-            //CkPrintf("Compute time = %f\n", comp_time);
             CkPrintf("Done epoch %u\n", EPOCH);
 #endif
             if (is_sync && sync_epoch == EPOCH)
@@ -368,12 +369,11 @@ public:
             size_t num_ghost_fields = extract<size_t>(graph);
             if (num_ghost_fields > 1)
                 CkAbort("Not implemented");
-            if (num_ghost_fields == 1)
+            for(int i = 0; i < num_ghost_fields; i++)
                 uint8_t fname = extract<uint8_t>(graph);
 
             compute_fun_t compute_f;
             size_t hash = extract<size_t>(graph);
-            //CkPrintf("lookup hash = %lu\n", hash);
 
             // first check local cache
             auto find = fun_cache.find(hash);
@@ -390,10 +390,7 @@ public:
                 compute_f = find->second;
             }
 
-            //CkPrintf("Local size = %i, %i, %i\n", local_size[0], local_size[1], local_size[2]);
-
             compute_f(fields, num_chares, index, local_size, dims);
-            //comp_time += (CkTimer() - start_comp);
         }
 
 #ifndef NDEBUG
@@ -402,7 +399,7 @@ public:
 #endif
     }
 
-    void create_fields(uint8_t num_fields_, uint32_t* ghost_depth_, double* boundary_)
+    void create_fields(uint8_t num_fields_, uint32_t* ghost_depth_)
     {
         num_fields = num_fields_;
         //fields.resize(num_fields);
@@ -410,7 +407,6 @@ public:
         ghost_depth.resize(num_fields);
         for (uint8_t fname = 0; fname < num_fields; fname++)
         {
-            double bc = boundary_[fname];
             uint32_t depth = ghost_depth_[fname];
             uint32_t total_local_size = 1;
 #ifndef NDEBUG
@@ -424,32 +420,6 @@ public:
             fields[fname] = (double*) malloc(sizeof(double) * total_local_size);
             std::memset(fields[fname], 0, sizeof(double) * total_local_size);
             double* f = fields[fname];
-            if (ndims == 3)
-            {
-                for (int x = depth; x < local_size[0] + depth; x++)
-                    for (int y = depth; y < local_size[1] + depth; y++)
-                        f[IDX3D(x, y, depth, step)] = bc;
-
-                for (int x = depth; x < local_size[0] + depth; x++)
-                    for (int y = depth; y < local_size[1] + depth; y++)
-                        f[IDX3D(x, y, local_size[2] + depth, step)] = bc;
-
-                for (int x = depth; x < local_size[0] + depth; x++)
-                    for (int z = depth; z < local_size[2] + depth; z++)
-                        f[IDX3D(x, depth, z, step)] = bc;
-
-                for (int x = depth; x < local_size[0] + depth; x++)
-                    for (int z = depth; z < local_size[2] + depth; z++)
-                        f[IDX3D(x, local_size[1] + depth, z, step)] = bc;
-
-                for (int y = depth; y < local_size[1] + depth; y++)
-                    for (int z = depth; z < local_size[2] + depth; z++)
-                        f[IDX3D(depth, y, z, step)] = bc;
-
-                for (int y = depth; y < local_size[1] + depth; y++)
-                    for (int z = depth; z < local_size[2] + depth; z++)
-                        f[IDX3D(local_size[2] + depth, y, z, step)] = bc;
-            }
 
             ghost_depth[fname] = depth;
         }
