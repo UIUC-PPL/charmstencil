@@ -60,20 +60,20 @@ class FieldOperationNode(object):
                     self.identifier += op.graph.identifier
                 elif isinstance(op, slice):
                     self.identifier += to_bytes(OPERAND_TYPES.get('slice'), 'B')
-                    self.identifier += self._slice_to_bytes(op)
+                    self.identifier += self._slice_to_bytes(op, operands[0].shape[0])
                 elif isinstance(op, tuple):
-                    if isinstance(op[0], slice):
-                        self.identifier += to_bytes(
-                            OPERAND_TYPES.get('slice'), 'B'
-                        )
-                    elif isinstance(op[0], int):
-                        self.identifier += to_bytes(
-                            OPERAND_TYPES.get('int'), 'B'
-                        )
+                    optype = 'int'
                     for k in op:
                         if isinstance(k, slice):
-                            self.identifier += self._slice_to_bytes(k)
-                        elif isinstance(k, int):
+                            optype = 'slice'
+                    self.identifier += to_bytes(
+                        OPERAND_TYPES.get(optype), 'B'
+                    )
+                    if optype == 'slice':
+                        for i, k in enumerate(op):
+                            self.identifier += self._slice_to_bytes(k, operands[0].shape[i])
+                    elif optype == 'int':
+                        for k in op:
                             self.identifier += to_bytes(k, 'i')
                 elif isinstance(op, int):
                     self.identifier += to_bytes(
@@ -90,10 +90,16 @@ class FieldOperationNode(object):
                 else:
                     raise ValueError('unrecognized operation')
 
-    def _slice_to_bytes(self, key):
-        start = 0 if key.start is None else key.start
-        stop = 0 if key.stop is None else key.stop
-        step = 1 if key.step is None else key.step
+    def _slice_to_bytes(self, key, size):
+        if isinstance(key, slice):
+            start = 0 if key.start is None else key.start
+            stop = size if key.stop is None else key.stop
+            step = 1 if key.step is None else key.step
+        elif isinstance(key, int):
+            start = stop = key
+            step = 1
+        start = start + size if start < 0 else start
+        stop = stop + size if stop < 0 else stop
         buf = to_bytes(start, 'i')
         buf += to_bytes(stop, 'i')
         buf += to_bytes(step, 'i')
