@@ -181,6 +181,7 @@ public:
                 std::vector<uint8_t> ghost_fields;
                 size_t hash = compile_compute_fun(msg, cmd_size, ndims, nfields,
                         std::vector<uint32_t>(), local_size, num_chares, ghost_fields);
+                printf("generating hash = %lu\n", hash);
                 size_t num_ghost_fields = ghost_fields.size();
                 uint32_t new_size = sizeof(bool) + 2 * sizeof(size_t) + 
                     num_ghost_fields * sizeof(uint8_t);

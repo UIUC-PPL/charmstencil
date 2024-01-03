@@ -371,6 +371,8 @@ public:
 
             compute_fun_t compute_f;
             size_t hash = extract<size_t>(graph);
+            CkPrintf("lookup hash = %lu\n", hash);
+
             // first check local cache
             auto find = fun_cache.find(hash);
             if (find == std::end(fun_cache))
