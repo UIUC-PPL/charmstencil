@@ -365,7 +365,7 @@ public:
         {
             // FIXME handle multiple fields
             size_t num_ghost_fields = extract<size_t>(graph);
-            if (num_ghost_fields != 1)
+            if (num_ghost_fields > 1)
                 CkAbort("Not implemented");
             uint8_t fname = extract<uint8_t>(graph);
 
