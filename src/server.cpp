@@ -4,13 +4,11 @@
 
 #include "server.decl.h"
 
-
 class Main : public CBase_Main
 {
 public:
     Main(CkArgMsg* msg) 
     {
-        Server::initialize();
         register_handlers();
         codegen_proxy = CProxy_CodeGenCache::ckNew();
 #ifndef NDEBUG
@@ -20,15 +18,12 @@ public:
 
     void register_handlers()
     {
-        CcsRegisterHandler("aum_connect", (CmiHandler) Server::connection_handler);
-        CcsRegisterHandler("aum_disconnect", (CmiHandler) Server::disconnection_handler);
-        CcsRegisterHandler("aum_operation", (CmiHandler) Server::operation_handler);
-        CcsRegisterHandler("aum_sync", (CmiHandler) Server::sync_handler);
-        CcsRegisterHandler("aum_fetch", (CmiHandler) Server::fetch_handler);
-        CcsRegisterHandler("aum_delete", (CmiHandler) Server::delete_handler);
-        CcsRegisterHandler("aum_exit", (CmiHandler) Server::exit_server);
-        CcsRegisterHandler("aum_create", (CmiHandler) Server::create_handler);
+        CcsRegisterHandler("connect", (CmiHandler) Server::connection_handler);
+        CcsRegisterHandler("disconnect", (CmiHandler) Server::disconnection_handler);
+        CcsRegisterHandler("operation", (CmiHandler) Server::operation_handler);
+        CcsRegisterHandler("fetch", (CmiHandler) Server::fetch_handler);
     }
 };
 
 #include "server.def.h"
+

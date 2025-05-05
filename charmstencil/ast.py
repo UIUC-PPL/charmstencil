@@ -4,6 +4,16 @@ from networkx.drawing.nx_pydot import graphviz_layout
 import matplotlib.pyplot as plt
 from ctypes import c_long
 from charmstencil.interface import to_bytes
+from copy import deepcopy
+
+
+kernel_id = 0
+
+def get_next_kernel_id():
+    global kernel_id
+    id = kernel_id
+    kernel_id += 1
+    return id
 
 
 OPCODES = {'noop': 0, 'create': 1, '+': 2, '-': 3, '*': 4, 'norm': 5,
@@ -13,115 +23,139 @@ OPCODES = {'noop': 0, 'create': 1, '+': 2, '-': 3, '*': 4, 'norm': 5,
 INV_OPCODES = {v: k for k, v in OPCODES.items()}
 
 
-OPERAND_TYPES = {'field': 0, 'slice': 1, 'tuple': 2, 'int': 3, 'double': 4}
+OPERAND_TYPES = {'array': 0, 'tuple_slice': 1, 'slice': 2, 'tuple_int': 3, 'int': 4, 'float': 5}
 
 
-class CreateFieldNode(object):
-    def __init__(self, name, shape, **kwargs):
-        self.name = name
-        self.shape = shape
-        self.ghost_depth = kwargs.pop('ghost_depth', 1)
-        self.identifier = to_bytes(OPCODES.get('create'), 'B') + \
-            to_bytes(self.name, 'B') + to_bytes(self.ghost_depth, 'B')
-        # FIXME get ghost info from kwargs
+class KernelParameter(object):
+    def __init__(self, index, **kwargs):
+        self.index = index
+        self.slice_key = kwargs.pop('slice_key', None)
+        self.graph = kwargs.pop('graph', ParamOperationNode('noop', [self]))
+        self.generation = kwargs.pop('generation', 0)
+        # for a new array this dag node is the independent ArrayDAGNode
+        # after this array is written to by a kernel, this is the KernelDAGNode
+        # that wrote to this array
+        # TODO get ghost data from kwargs
 
-    def get_identifier(self):
-        return to_bytes(False, '?') + self.identifier
+    def __getitem__(self, key):
+        from charmstencil.kernel import get_active_kernel_graph
+        node = ParamOperationNode('getitem', [ParamOperationNode('noop', [self]), 
+                                              ParamOperationNode('noop', [key])])
+        get_active_kernel_graph().add_input(self)
+        return KernelParameter(self.index, slice_key=key, graph=node)
 
-    def fill_plot(self, G, node_map={}, next_id=0, parent=None):
-        G.add_node(next_id)
-        G.add_edge(parent, next_id)
-        node_map[next_id] = 'CreateField: f' + str(self.name)
-        return next_id + 1
+    def __setitem__(self, key, value):
+        from charmstencil.kernel import get_active_kernel_graph
+        if isinstance(value, KernelParameter):
+            value_node = value.graph
+        else:
+            value_node = ParamOperationNode('noop', [value])
+        node = ParamOperationNode('setitem', [ParamOperationNode('noop', [self]), 
+                                              ParamOperationNode('noop', [key]), 
+                                              value_node])
+        get_active_kernel_graph().add_input(self)
+        get_active_kernel_graph().add_output(self)
+        get_active_kernel_graph().insert(node)
 
+    def __add__(self, other):
+        if isinstance(other, KernelParameter):
+            other_node = other.graph
+        else:
+            other_node = ParamOperationNode('noop', [other])
+        node = ParamOperationNode('+', [self.graph, other_node])
+        return KernelParameter(self.index, graph=node)
 
-class FieldOperationNode(object):
-    def __init__(self, operation, operands, save=False):
-        from charmstencil.stencil import Field
+    def __sub__(self, other):
+        if isinstance(other, KernelParameter):
+            other_node = other.graph
+        else:
+            other_node = ParamOperationNode('noop', [other])
+        node = ParamOperationNode('-', [self.graph, other_node])      
+        return KernelParameter(self.index, graph=node)
+
+    def __mul__(self, other):
+        if isinstance(other, KernelParameter):
+            other_node = other.graph
+        else:
+            other_node = ParamOperationNode('noop', [other])
+        node = ParamOperationNode('*', [self.graph, other_node])
+        return KernelParameter(self.index, graph=node)
+
+    def __rmul__(self, other):
+        return self * other
+
+    def __div__(self, other):
+        return self * (1 / other)
+
+    def get(self):
+        raise NotImplementedError
+    
+
+class ParamOperationNode(object):
+    def __init__(self, operation, operands):
         self.opcode = OPCODES.get(operation)
         self.operands = operands
-        self.save = save
-        self.identifier = to_bytes(OPERAND_TYPES.get('field'), 'B')
-        self.identifier += to_bytes(self.opcode, 'B')
-        if self.opcode == 0:
-            self.identifier += to_bytes(operands[0].name, 'B')
-        elif self.opcode == 8:
-            self.identifier += to_bytes(len(operands), 'B')
-            for op in operands:
-                self.identifier += to_bytes(op.name, 'B')
-        else:
-            #self.identifier += to_bytes(len(operands), 'B')
-            for op in operands:
-                if isinstance(op, Field):
-                    #self.identifier += to_bytes(
-                    #    OPERAND_TYPES.get('field'), 'B'
-                    #)
-                    self.identifier += op.graph.identifier
-                elif isinstance(op, slice):
-                    self.identifier += to_bytes(OPERAND_TYPES.get('slice'), 'B')
-                    self.identifier += self._slice_to_bytes(op)
-                elif isinstance(op, tuple):
-                    if isinstance(op[0], slice):
-                        self.identifier += to_bytes(
-                            OPERAND_TYPES.get('slice'), 'B'
-                        )
-                    elif isinstance(op[0], int):
-                        self.identifier += to_bytes(
-                            OPERAND_TYPES.get('int'), 'B'
-                        )
-                    for k in op:
-                        if isinstance(k, slice):
-                            self.identifier += self._slice_to_bytes(k)
-                        elif isinstance(k, int):
-                            self.identifier += to_bytes(k, 'i')
-                elif isinstance(op, int):
-                    self.identifier += to_bytes(
-                        OPERAND_TYPES.get('int'), 'B'
-                    )
-                    self.identifier += to_bytes(0, 'B')
-                    self.identifier += to_bytes(op, 'i')
-                elif isinstance(op, float):
-                    self.identifier += to_bytes(
-                        OPERAND_TYPES.get('double'), 'B'
-                    )
-                    self.identifier += to_bytes(0, 'B')
-                    self.identifier += to_bytes(op, 'd')
-                else:
-                    raise ValueError('unrecognized operation')
 
-    def _slice_to_bytes(self, key):
-        start = 0 if key.start is None else key.start
-        stop = 0 if key.stop is None else key.stop
-        step = 1 if key.step is None else key.step
-        buf = to_bytes(start, 'i')
-        buf += to_bytes(stop, 'i')
-        buf += to_bytes(step, 'i')
-        return buf
+    def serialize(self):
+        cmd = to_bytes(self.opcode, 'B')
+        for op in self.operands:
+            if isinstance(op, KernelParameter):
+                cmd += to_bytes(OPERAND_TYPES.get('array'), 'B')
+                cmd += to_bytes(op.index, 'i')
+            elif isinstance(op, int):
+                cmd += to_bytes(OPERAND_TYPES.get('int'), 'B')
+                cmd += to_bytes(op, 'i')
+            elif isinstance(op, float):
+                cmd += to_bytes(OPERAND_TYPES.get('float'), 'B')
+                cmd += to_bytes(op, 'f')
+            elif isinstance(op, tuple):
+                tuple_type = OPERAND_TYPES.get('tuple_int')
+                for k in op:
+                    if isinstance(k, slice):
+                        tuple_type = OPERAND_TYPES.get('tuple_slice')
+
+                #cmd += to_bytes(len(op), 'B')
+                for k in op:
+                    if isinstance(k, slice):
+                        cmd += self._slice_to_bytes(k)
+                    elif isinstance(k, int) and tuple_type == OPERAND_TYPES.get('tuple_int'):
+                        cmd += to_bytes(k, 'i')
+                    elif isinstance(k, int) and tuple_type == OPERAND_TYPES.get('tuple_slice'):
+                        cmd += self._slice_to_bytes(self._int_to_slice(k))
+                    else:
+                        raise ValueError('unrecognized operation')
+            elif isinstance(op, ParamOperationNode):
+                cmd += op.serialize()
+            else:
+                raise ValueError('unrecognized operation')
+        return cmd
 
     def fill_plot(self, G, node_map={}, next_id=0, parent=None):
-        from charmstencil.stencil import Field
-        if self.opcode == 0:
-            node_map[next_id] = 'f' + str(self.operands[0].name)
+        if self.opcode == OPCODES['noop']:
+            if isinstance(self.operands[0], KernelParameter):
+                node_map[next_id] = 'f' + str(self.operands[0].index)
+                G.add_node(next_id)
+                if parent is not None:
+                    G.add_edge(parent, next_id)
+                return next_id + 1
+            elif isinstance(self.operands[0], float) or isinstance(self.operands[0], int) or \
+                isinstance(self.operands[0], slice) or isinstance(self.operands[0], tuple):
+                G.add_node(next_id)
+                G.add_edge(parent, next_id)
+                node_map[next_id] = str(self.operands[0])
+                return next_id + 1
+        else:
+            opnode = next_id
             G.add_node(next_id)
             if parent is not None:
                 G.add_edge(parent, next_id)
-            return next_id + 1
-        opnode = next_id
-        G.add_node(next_id)
-        if parent is not None:
-            G.add_edge(parent, next_id)
-        node_map[next_id] = INV_OPCODES.get(self.opcode, '?')
-        next_id += 1
-        for op in self.operands:
-            # an operand can also be a double
-            if isinstance(op, Field):
-                next_id = op.graph.fill_plot(G, node_map, next_id, opnode)
-            elif isinstance(op, float) or isinstance(op, int) or \
-                isinstance(op, slice) or isinstance(op, tuple):
-                G.add_node(next_id)
-                G.add_edge(opnode, next_id)
-                node_map[next_id] = str(op)
-                next_id += 1
+            node_map[next_id] = INV_OPCODES.get(self.opcode, '?')
+            next_id += 1
+
+            for op in self.operands:
+                # an operand can also be a double
+                next_id = op.fill_plot(G, node_map=node_map, next_id=next_id,
+                                      parent=opnode)
         return next_id
 
     def plot(self):
@@ -132,19 +166,58 @@ class FieldOperationNode(object):
         nx.draw(G, pos, labels=node_map, node_size=600, font_size=10)
         plt.show()
 
+    def _slice_to_bytes(self, s):
+        cmd += to_bytes(s.start, 'i')
+        cmd += to_bytes(s.stop, 'i')
+        cmd += to_bytes(s.step, 'i')
+        return cmd
+    
+    def _int_to_slice(self, i):
+        return slice(i, i + 1, 1)
 
-class ComputeGraph(object):
-    def __init__(self):
+
+class KernelGraph(object):
+    def __init__(self, name):
+        self.name = name
         self.graph = []
+        self.kernel_id = get_next_kernel_id()
+        self.inputs = set()
+        self.outputs = set()
+
+    def get_input_output(self, args):
+        inputs = set()
+        outputs = set()
+
+        for inp in self.inputs:
+            inputs.add(args[inp.index])
+        for out in self.outputs:
+            outputs.add(args[out.index])
+        return inputs, outputs
 
     def is_empty(self):
         return len(self.graph) == 0
 
     def insert(self, node):
-        self.graph.append(node)
+        self.graph.append(deepcopy(node))
 
-    def get_identifier(self):
-        return to_bytes(True, '?') + b''.join([node.identifier for node in self.graph])
+    def add_input(self, input):
+        self.inputs.add(input)
+
+    def add_output(self, output):
+        self.outputs.add(output)
+
+    def serialize(self):
+        cmd = to_bytes(self.kernel_id, 'B')
+
+        gcmd = to_bytes(len(self.inputs), 'B')
+        gcmd += to_bytes(len(self.outputs), 'B')
+        gcmd += to_bytes(len(self.graph), 'B')
+        for g in self.graph:
+            gcmd += g.serialize()
+        
+        cmd += to_bytes(len(gcmd), 'i')
+        cmd += gcmd
+        return cmd
 
     def fill_plot(self, G, node_map={}, next_id=0, parent=None):
         for g in self.graph:
@@ -154,81 +227,10 @@ class ComputeGraph(object):
 
     def plot(self):
         G = nx.Graph()
+        plt.title(f"Kernel Graph: {self.name}", loc='center')
         node_map = {}
         next_id = 0
         self.fill_plot(G, node_map=node_map, next_id=next_id)
         pos = graphviz_layout(G, prog='dot')
         nx.draw(G, pos, labels=node_map, node_size=600, font_size=10)
         plt.show()
-
-
-class IterateGraph(ComputeGraph):
-    def __init__(self):
-        super().__init__()
-
-
-class BoundaryGraph(ComputeGraph):
-    def __init__(self):
-        super().__init__()
-
-
-class StencilGraph(object):
-    def __init__(self, stencil, max_epochs):
-        self.unique_graphs = []
-        self.graphs = []
-        self.iterate_identifier_map = {}
-        self.boundary_identifier_map = {}
-        self.max_epochs = max_epochs
-        self.stencil = stencil
-        self.next_graph = 0
-        self.epoch = 0
-
-    def _insert_graph(self, graph, id_map):
-        identifier = graph.get_identifier()
-        if identifier not in id_map:
-            id_map[identifier] = len(self.unique_graphs)
-            self.unique_graphs.append(graph)
-        self.graphs.append(id_map[identifier])
-
-    def _insert_node(self, node):
-        self.graphs.append(len(self.unique_graphs))
-        self.unique_graphs.append(node)
-
-    def is_empty(self):
-        return len(self.graphs) == 0
-
-    def flush(self):
-        self.graphs = []
-        self.epoch += 1
-
-    def insert(self, obj):
-        if isinstance(obj, IterateGraph):
-            self._insert_graph(obj, self.iterate_identifier_map)
-        elif isinstance(obj, BoundaryGraph):
-            self._insert_graph(obj, self.boundary_identifier_map)
-        elif isinstance(obj, CreateFieldNode):
-            self._insert_node(obj)
-        else:
-            raise ValueError("incorrect type of obj")
-        if len(self.graphs) >= self.max_epochs:
-            self.evaluate()
-
-    def evaluate(self):
-        self.stencil.evaluate()
-
-    def plot(self):
-        G = nx.Graph()
-        node_map = {}
-        next_id = 0
-        for i, g in enumerate(self.unique_graphs):
-            G.add_node(next_id)
-            node_map[next_id] = 'g%i' % i
-            next_id += 1
-            next_id = g.fill_plot(G, node_map=node_map, next_id=next_id, parent=next_id - 1)
-        pos = graphviz_layout(G, prog='dot')
-        nx.draw(G, pos, labels=node_map, node_size=600, font_size=10)
-        print('Epoch\tGraph')
-        for i, n in enumerate(self.graphs):
-            print('%i\t%s' % (i, 'g%i' % n if isinstance(n, int) else n))
-        plt.show()
-

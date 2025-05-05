@@ -2,6 +2,15 @@ module stencil
 {
     readonly CProxy_CodeGenCache codegen_proxy;
 
+    array [2D] Stencil
+    {
+        entry Stencil(int, int);
+            
+        entry void receive_dag(int size, char cmd[size]);
+
+        entry [threaded] void execute(int kernel_id, std::vector<int> inputs, CkLocalFuture future);
+    };
+
     nodegroup CodeGenCache
     {
         entry CodeGenCache();
@@ -9,47 +18,7 @@ module stencil
         entry [reductiontarget] void start_time(double time);
 
         entry [reductiontarget] void end_time(double time);
-    };
 
-    array [3D] Stencil
-    {
-        entry Stencil(uint8_t name_, uint32_t ndims_, uint32_t dims_[ndims_], uint32_t odf_,
-        uint8_t num_fields_, uint32_t ghost_depth_[ndims_]);
-            
-        entry void receive_graph(int epoch, int size, char cmd[size]);
-
-        entry void execute_graph(int epoch, int size, char cmd[size]);
-
-        entry void receive_ghost(int iter, uint8_t fname, int dir, int size, nocopydevice double data[size]);
-
-        entry [reductiontarget] void start()
-        {
-            while (EPOCH > -1)
-            {
-                when receive_graph[EPOCH] (int epoch, int size, char cmd[size])
-                    serial "execute graph" {
-                        execute_graph(epoch, size, cmd);
-                    }
-            }
-        };
-
-        entry [threaded] void wait(ck::future<bool> done);
-
-        entry void iterate(uint8_t gid)
-        {
-            while (num_ghost_recv < num_nbrs)
-            {
-                when receive_ghost[itercount](int iter, uint8_t fname, int dir, int size, nocopydevice double data[size])
-                    serial "process_ghost" {
-                        process_ghost(fname, dir, size, data);
-                        num_ghost_recv++;
-                    }
-            }
-            serial "done_exchange" {
-                num_ghost_recv = 0;
-                call_compute(gid);
-                run_next_iteration();
-            }
-        };
+        entry void receive(int size, char msg[size], CProxy_Stencil stencil_proxy);
     };
 }

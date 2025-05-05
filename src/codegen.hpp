@@ -1,3 +1,5 @@
+#ifndef CODEGEN_HPP
+#define CODEGEN_HPP
 #include <iostream>
 #include <fstream>
 #include <cstring>
@@ -11,105 +13,17 @@
 #define FMT_HEADER_ONLY
 #include <fmt/format.h>
 #include "hapi.h"
+#include "ast.hpp"
 
 typedef CUfunction compute_fun_t;
 
+static std::string get_kernel_header();
 
-template<class T>
-inline T extract(char* &msg, bool increment=true)
-{
-    T arg = *(reinterpret_cast<T*>(msg));
-    if (increment)
-        msg += sizeof(T);
-    return arg;
-}
+void write_kernel(FILE* genfile, Kernel* knl);
 
+void generate_kernel(Kernel* knl, int suffix);
 
-enum class Operation : uint8_t
-{
-    noop = 0,
-    create = 1,
-    add = 2,
-    sub = 3,
-    mul = 4,
-    norm = 5,
-    getitem = 6,
-    setitem = 7,
-    exchange_ghosts = 8
-};
-
-
-enum class OperandType : uint8_t
-{
-    field = 0,
-    slice = 1,
-    tuple = 2,
-    int_t = 3,
-    double_t = 4
-};
-
-
-Operation lookup_operation(uint8_t opcode)
-{
-    return static_cast<Operation>(opcode);
-}
-
-
-OperandType lookup_type(uint8_t typecode)
-{
-    return static_cast<OperandType>(typecode);
-}
-
-
-struct Slice1D
-{
-    int start;
-    int stop;
-    int step;
-
-    Slice1D()
-    {
-         start = 0;
-         stop = 0;
-         step = 1;
-    }
-};
-
-
-struct Slice
-{
-    Slice1D index[3];
-};
-
-
-Slice get_slice(char* &cmd, int ndims, 
-        std::vector<uint32_t> num_chares, std::vector<uint32_t> local_size)
-{
-    Slice key;
-    int start, stop, step;
-
-    OperandType operand_type = lookup_type(extract<uint8_t>(cmd));
-
-    switch (operand_type)
-    {
-        case OperandType::slice:
-        {
-            for(int i = 0; i < ndims; i++)
-            {
-                start = extract<int>(cmd);
-                stop = extract<int>(cmd);
-                step = extract<int>(cmd);
-
-                key.index[i].start = start;
-                key.index[i].stop = stop;
-            }
-        }
-    }
-    
-    return key;
-}
-
-void generate_code(FILE* genfile, char* &cmd, int ndims, std::vector<uint32_t> ghost_depth,
+/*void generate_code(FILE* genfile, char* &cmd, int ndims, std::vector<uint32_t> ghost_depth,
         std::vector<uint32_t> local_size, std::vector<uint32_t> num_chares,
         std::vector<uint8_t> &ghost_fields);
 
@@ -562,4 +476,5 @@ std::string generate_loop_rhs(FILE* genfile, char* &cmd, int ndims, uint32_t dep
             return "";
         }
     }
-}
+}*/
+#endif // CODEGEN_HPP

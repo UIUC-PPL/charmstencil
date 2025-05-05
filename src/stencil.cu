@@ -5,10 +5,11 @@
 #include <fstream>
 #include <cstring>
 #include <iostream>
+#define FMT_HEADER_ONLY
 #include <fmt/format.h>
 #include "hapi.h"
 
-#define COMPUTE_FUNC "_Z12compute_funcv"
+#define COMPUTE_FUNC "compute_func"
 
 #define CHECK(expression)                                    \
   {                                                          \
@@ -198,28 +199,26 @@ void* get_module(std::string &fatbin_file)
     return buffer;
 }
 
-CUfunction load_kernel(size_t &hash)
+CUfunction load_kernel(size_t &hash, int suffix)
 {
     CUmodule cumodule;
     CUfunction kernel;
 
-    std::string fatbin_file = fmt::format("./stencil_{}.fatbin", hash);
+    std::string ptx_file = fmt::format("./kernel_{}_{}.ptx", hash, suffix);
 
-    CHECK(cuModuleLoadFatBinary(&cumodule, get_module(fatbin_file)));
+    CHECK(cuModuleLoad(&cumodule, ptx_file.c_str()));
     CHECK(cuModuleGetFunction(&kernel, cumodule, COMPUTE_FUNC));
     return kernel;
 }
 
-void launch_kernel(void** args, uint32_t* local_size, int* block_sizes, 
-    CUfunction& compute_kernel, cudaStream_t& stream)
+void launch_kernel(void** args, CUfunction& compute_kernel, cudaStream_t& stream,
+    int* threads_per_block, int* grid)
 {
     // figure out how to load compute kernel
-    printf("Launch kernel %i, %i, %i\n", block_sizes[0], block_sizes[1], block_sizes[2]);
+    //printf("Launch kernel %i, %i, %i\n", block_sizes[0], block_sizes[1], block_sizes[2]);
     cuLaunchKernel(compute_kernel, 
-        ceil(((float) local_size[0]) / block_sizes[0]),
-        ceil(((float) local_size[1]) / block_sizes[1]),
-        ceil(((float) local_size[2]) / block_sizes[2]),
-        block_sizes[0], block_sizes[1], block_sizes[2],
+        threads_per_block[0], threads_per_block[1], 1,
+        grid[0], grid[1], 1,
         0, stream, args, NULL);
     hapiCheck(cudaPeekAtLastError());
 }
