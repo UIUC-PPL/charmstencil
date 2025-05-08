@@ -49,8 +49,8 @@ class Array(object):
     def __div__(self, other):
         raise RuntimeError('This operation outside of a kernel is not allowed')
 
-    def get(self):
-        raise RuntimeError('This operation outside of a kernel is not allowed')
+    def get(self, interface):
+        return interface.get(self.name)
     
     def inc_generation(self, kernel_node):
         self.dag_node = kernel_node

@@ -98,15 +98,16 @@ public:
     std::string generate_code(Context* ctx);
 };
 
-void choose_optimal_grid(int* &threads_per_block, int nx, int ny);
+void choose_optimal_grid(int* threads_per_block, int nx, int ny);
 
 class Kernel
 {
 public:
     int kernel_id;
     std::vector<ASTNode*> nodes;
-    int num_inputs;
+    int num_args;
     int num_outputs;
+    std::vector<int> outputs;
     size_t hash;
     std::unordered_map<int, Slice> output_slices;
 
@@ -119,6 +120,8 @@ public:
 
     std::string generate_variable_declarations(Context* ctx);
 
+    std::string generate_debug(Context* ctx);
+
     std::string generate_body(Context* ctx);
 
     std::string generate_arguments(Context* ctx);
@@ -128,10 +131,10 @@ public:
     std::string generate_code(Context* ctx);
 };
 
-ASTNode* build_noop(char* cmd);
+ASTNode* build_noop(char* &cmd);
 
-ASTNode* build_ast(char* cmd);
+ASTNode* build_ast(char* &cmd);
 
-Kernel* build_kernel(char* cmd);
+Kernel* build_kernel(char* &cmd);
 
 #endif // AST_HPP

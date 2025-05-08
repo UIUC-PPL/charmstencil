@@ -10,6 +10,10 @@ std::string get_op_string(Operation& oper)
             return "-";
         case Operation::mul:
             return "*";
+        case Operation::getitem:
+            return "[]";
+        case Operation::setitem:
+            return "[]=";
         default:
             return "";
     }

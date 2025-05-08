@@ -5,8 +5,13 @@
 #include <vector>
 #include <unordered_map>
 #include <string>
-#include <fmt/format.h>
 #include <cuda.h>
+
+#ifndef NDEBUG
+#define DEBUG_PRINT(...) CkPrintf(__VA_ARGS__)
+#else
+#define DEBUG_PRINT(...)
+#endif
 
 template<class T>
 inline T extract(char* &msg, bool increment=true)

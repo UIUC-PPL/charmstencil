@@ -3,7 +3,7 @@ CHARMC=$(CHARMDIR)/mpi-linux-x86_64-cuda/bin/charmc
 CHARM_INC=-I$(CHARMDIR)/include
 NVCC=nvcc
 NVCC_FLAGS=-c -std=c++17  -use_fast_math -O3 -I/u/bhosale/fmt/include 
-OPTS=-c++-option -std=c++17 -O3 -g -ldl -I/u/bhosale/fmt/include -DNDEBUG
+OPTS=-c++-option -std=c++17 -O3 -g -ldl -I/u/bhosale/fmt/include
 LD_LIBS=-lcuda
 
 all: server.out
@@ -29,13 +29,13 @@ utils.o: utils.cpp utils.hpp
 ast.o: ast.cpp ast.hpp array.hpp utils.hpp
 	$(CHARMC) -c $< $(OPTS) $(CHARM_INC)
 
-dag.o: dag.cpp dag.hpp array.hpp utils.hpp
+dag.o: dag.cpp dag.hpp array.hpp utils.hpp ast.hpp
 	$(CHARMC) -c $< $(OPTS) $(CHARM_INC)
 
-codegen.o: codegen.cpp codegen.hpp array.hpp utils.hpp
+codegen.o: codegen.cpp codegen.hpp array.hpp utils.hpp ast.hpp
 	$(CHARMC) -c $< $(OPTS) $(CHARM_INC)
 
-stencil.o: stencil.cpp stencil.hpp array.hpp utils.hpp
+stencil.o: stencil.cpp stencil.hpp array.hpp utils.hpp ast.hpp dag.hpp
 	$(CHARMC) -c $< $(OPTS) $(CHARM_INC)
 
 stencilCUDA.o: stencil.cu stencil.hpp

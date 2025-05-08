@@ -26,6 +26,20 @@ INV_OPCODES = {v: k for k, v in OPCODES.items()}
 OPERAND_TYPES = {'array': 0, 'tuple_slice': 1, 'slice': 2, 'tuple_int': 3, 'int': 4, 'float': 5}
 
 
+def slice_to_bytes(key):
+    start = 0 if key.start is None else key.start
+    stop = np.iinfo(np.int32).max if key.stop is None else key.stop
+    step = 1 if key.step is None else key.step
+    cmd = to_bytes(start, 'i')
+    cmd += to_bytes(stop, 'i')
+    cmd += to_bytes(step, 'i')
+    return cmd
+
+
+def int_to_slice(i):
+    return slice(i, i + 1, 1)
+
+
 class KernelParameter(object):
     def __init__(self, index, **kwargs):
         self.index = index
@@ -41,7 +55,6 @@ class KernelParameter(object):
         from charmstencil.kernel import get_active_kernel_graph
         node = ParamOperationNode('getitem', [ParamOperationNode('noop', [self]), 
                                               ParamOperationNode('noop', [key])])
-        get_active_kernel_graph().add_input(self)
         return KernelParameter(self.index, slice_key=key, graph=node)
 
     def __setitem__(self, key, value):
@@ -53,7 +66,6 @@ class KernelParameter(object):
         node = ParamOperationNode('setitem', [ParamOperationNode('noop', [self]), 
                                               ParamOperationNode('noop', [key]), 
                                               value_node])
-        get_active_kernel_graph().add_input(self)
         get_active_kernel_graph().add_output(self)
         get_active_kernel_graph().insert(node)
 
@@ -98,6 +110,7 @@ class ParamOperationNode(object):
 
     def serialize(self):
         cmd = to_bytes(self.opcode, 'B')
+        cmd += to_bytes(len(self.operands), 'i')
         for op in self.operands:
             if isinstance(op, KernelParameter):
                 cmd += to_bytes(OPERAND_TYPES.get('array'), 'B')
@@ -115,13 +128,14 @@ class ParamOperationNode(object):
                         tuple_type = OPERAND_TYPES.get('tuple_slice')
 
                 #cmd += to_bytes(len(op), 'B')
+                cmd += to_bytes(tuple_type, 'B')
                 for k in op:
                     if isinstance(k, slice):
-                        cmd += self._slice_to_bytes(k)
+                        cmd += slice_to_bytes(k)
                     elif isinstance(k, int) and tuple_type == OPERAND_TYPES.get('tuple_int'):
                         cmd += to_bytes(k, 'i')
                     elif isinstance(k, int) and tuple_type == OPERAND_TYPES.get('tuple_slice'):
-                        cmd += self._slice_to_bytes(self._int_to_slice(k))
+                        cmd += slice_to_bytes(int_to_slice(k))
                     else:
                         raise ValueError('unrecognized operation')
             elif isinstance(op, ParamOperationNode):
@@ -166,33 +180,17 @@ class ParamOperationNode(object):
         nx.draw(G, pos, labels=node_map, node_size=600, font_size=10)
         plt.show()
 
-    def _slice_to_bytes(self, s):
-        cmd += to_bytes(s.start, 'i')
-        cmd += to_bytes(s.stop, 'i')
-        cmd += to_bytes(s.step, 'i')
-        return cmd
-    
-    def _int_to_slice(self, i):
-        return slice(i, i + 1, 1)
-
 
 class KernelGraph(object):
     def __init__(self, name):
         self.name = name
         self.graph = []
         self.kernel_id = get_next_kernel_id()
-        self.inputs = set()
+        self.args = set()
         self.outputs = set()
 
-    def get_input_output(self, args):
-        inputs = set()
-        outputs = set()
-
-        for inp in self.inputs:
-            inputs.add(args[inp.index])
-        for out in self.outputs:
-            outputs.add(args[out.index])
-        return inputs, outputs
+    def get_outputs(self, args):
+        return [args[output.index] for output in self.outputs]
 
     def is_empty(self):
         return len(self.graph) == 0
@@ -200,18 +198,18 @@ class KernelGraph(object):
     def insert(self, node):
         self.graph.append(deepcopy(node))
 
-    def add_input(self, input):
-        self.inputs.add(input)
-
     def add_output(self, output):
         self.outputs.add(output)
 
     def serialize(self):
-        cmd = to_bytes(self.kernel_id, 'B')
+        #self.reindex()
+        cmd = to_bytes(self.kernel_id, 'i')
 
-        gcmd = to_bytes(len(self.inputs), 'B')
-        gcmd += to_bytes(len(self.outputs), 'B')
-        gcmd += to_bytes(len(self.graph), 'B')
+        gcmd = to_bytes(len(self.args), 'i')
+        gcmd += to_bytes(len(self.outputs), 'i')
+        for out in self.outputs:
+            gcmd += to_bytes(out.index, 'i')
+        gcmd += to_bytes(len(self.graph), 'i')
         for g in self.graph:
             gcmd += g.serialize()
         

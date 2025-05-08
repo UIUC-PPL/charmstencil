@@ -41,7 +41,7 @@ class DAGNode(object):
             dependency (DAGNode): The dependency node to be added.
         """
         self.children.append(dependency)
-        print(f'Adding edge from {self.name} to {dependency.name}')
+        #print(f'Adding edge from {self.name} to {dependency.name}')
 
     def fill_plot(self, G, node_map={}, parent=None):
         """
@@ -53,7 +53,7 @@ class DAGNode(object):
             next_id (int): The next available ID for the node.
             parent (DAGNode): The parent node in the graph.
         """
-        print(self.children)
+        #print(self.children)
         if not G.has_node(self.gid):
             G.add_node(self.gid)
             node_map[self.gid] = self.name
@@ -122,6 +122,7 @@ class DAG(object):
 
     def serialize(self):
         # first add node information
+        #print(self.all_nodes)
         cmd = to_bytes(len(self.all_nodes), 'i')
         for node in self.all_nodes:
             cmd += to_bytes(node.node_type, 'i')
@@ -134,11 +135,8 @@ class DAG(object):
             else:
                 cmd += to_bytes(node.kernel_id, 'i')
                 cmd += to_bytes(len(node.inputs), 'i')
-                for out in node.outputs:
+                for out in node.inputs:
                     cmd += to_bytes(out.name, 'i')
-                for inp in node.inputs:
-                    if inp.name not in node.outputs:
-                        cmd += to_bytes(inp.name, 'i')
 
         # now add the edges
         cmd += to_bytes(len(self.edges), 'i')

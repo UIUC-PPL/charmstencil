@@ -8,6 +8,7 @@
 #define FMT_HEADER_ONLY
 #include <fmt/format.h>
 #include "hapi.h"
+#include "utils.hpp"
 
 #define COMPUTE_FUNC "compute_func"
 
@@ -17,7 +18,7 @@
     if (status != CUDA_SUCCESS) {                            \
       const char* err_str;                                   \
       cuGetErrorString(status, &err_str);                    \
-      std::cerr << "Error on line " << __LINE__ << ": "      \
+      std::cerr << "CUDA Error on line " << __LINE__ << ": " \
                 << err_str << std::endl;                     \
       std::exit(EXIT_FAILURE);                               \
     }                                                        \
@@ -28,7 +29,7 @@
 #define IDX(i, j, k, stepx, stepy) ((i) + (stepx) * (j) + (stepx) * (stepy) * (k))
 
 __global__
-void init_fields(double* f, int total_size)
+void init_array(float* f, int total_size)
 {
     int d0 = threadIdx.x + blockIdx.x * blockDim.x;
     
@@ -175,16 +176,13 @@ void invoke_fb_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, 
     hapiCheck(cudaPeekAtLastError());
 }
 
-void invoke_init_fields(double** fields, uint8_t num_fields, uint32_t total_size, cudaStream_t stream)
+void invoke_init_array(float* array, int total_size, cudaStream_t stream)
 {
     // TODO better to launch one kernel for all fields?
     printf("total size = %u\n", total_size);
     int num_blocks = ceil((float) total_size / BSZ1D);
-    for(int i = 0; i < num_fields; i++)
-    {
-        init_fields<<<num_blocks, BSZ1D, 0, stream>>>(fields[i], total_size);
-        hapiCheck(cudaPeekAtLastError());
-    }
+    init_array<<<num_blocks, BSZ1D, 0, stream>>>(array, total_size);
+    hapiCheck(cudaPeekAtLastError());
 }
 
 void* get_module(std::string &fatbin_file)
@@ -204,21 +202,26 @@ CUfunction load_kernel(size_t &hash, int suffix)
     CUmodule cumodule;
     CUfunction kernel;
 
-    std::string ptx_file = fmt::format("./kernel_{}_{}.ptx", hash, suffix);
+    std::string ptx_file = fmt::format("generated/kernel_{}_{}.ptx", hash, suffix);
+
+    DEBUG_PRINT("Loading kernel from file: %s\n", ptx_file.c_str());
 
     CHECK(cuModuleLoad(&cumodule, ptx_file.c_str()));
     CHECK(cuModuleGetFunction(&kernel, cumodule, COMPUTE_FUNC));
     return kernel;
 }
 
-void launch_kernel(void** args, CUfunction& compute_kernel, cudaStream_t& stream,
+void launch_kernel(std::vector<void*> args, CUfunction& compute_kernel, cudaStream_t& stream,
     int* threads_per_block, int* grid)
 {
     // figure out how to load compute kernel
     //printf("Launch kernel %i, %i, %i\n", block_sizes[0], block_sizes[1], block_sizes[2]);
-    cuLaunchKernel(compute_kernel, 
+    printf("Launch kernel (%i, %i); grid (%i, %i); num_args = %i\n", 
+        threads_per_block[0], threads_per_block[1], grid[0], grid[1], args.size());
+    CHECK(cuLaunchKernel(compute_kernel, 
         threads_per_block[0], threads_per_block[1], 1,
         grid[0], grid[1], 1,
-        0, stream, args, NULL);
+        0, stream, args.data(), NULL));
+    cuStreamSynchronize(stream);
     hapiCheck(cudaPeekAtLastError());
 }

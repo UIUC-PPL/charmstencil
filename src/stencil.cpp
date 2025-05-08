@@ -28,10 +28,10 @@ void CodeGenCache::end_time(double time)
     CkPrintf("Total time = %f\n", time - start);
 }
 
-void CodeGenCache::receive(int size, char* msg, CProxy_Stencil stencil_proxy)
+void CodeGenCache::receive(int size, char* cmd, CProxy_Stencil stencil_proxy_)
 {
-    char* cmd = msg + CmiMsgHeaderSizeBytes;
     int num_kernels = extract<int>(cmd);
+    CkPrintf("Received %i kernels\n", num_kernels);
     for (int i = 0; i < num_kernels; i++)
     {
         Kernel* knl = build_kernel(cmd);
@@ -40,15 +40,93 @@ void CodeGenCache::receive(int size, char* msg, CProxy_Stencil stencil_proxy)
         cache[knl->hash] = load_kernel(knl->hash, thisIndex);
     }
 
-    contribute();
+    stencil_proxy = stencil_proxy_;
+    saved_dag_size = extract<int>(cmd);
+    saved_dag = new char[saved_dag_size];
+    memcpy(saved_dag, cmd, saved_dag_size);
 
-    int dag_size = extract<int>(cmd);
-    if (thisIndex == 0)
-        stencil_proxy.receive_dag(dag_size, cmd);
+    int done = 1;
+    CkCallback cb(CkReductionTarget(CodeGenCache, send_dag), thisProxy[0]);
+    contribute(sizeof(int), (void*) &done, CkReduction::sum_int, cb);
 }
+
+void CodeGenCache::send_dag(int done)
+{
+    stencil_proxy.receive_dag(saved_dag_size, saved_dag);
+    delete[] saved_dag;
+}
+
+void CodeGenCache::operation_done(int done)
+{
+    CkPrintf("Operation done\n");
+    int ret = 1;
+    CcsSendDelayedReply(operation_reply, sizeof(int), &ret);
+}
+
+void CodeGenCache::gather(int name, int index_x, int index_y, int local_dim, int num_chares, int data_size, float* data)
+{
+    int total_dim = num_chares * local_dim;
+
+    // gather data from all sources
+    int start_x = index_x * local_dim;
+    int start_y = index_y * local_dim;
+
+    int stop_x = start_x + local_dim;
+    int stop_y = start_y + local_dim;
+
+    auto it = gathered_arrays.find(name);
+    float* all_data;
+    if (it == gathered_arrays.end())
+    {
+        all_data = (float*) malloc(sizeof(float) * total_dim * total_dim);
+
+        // copy data to all_data
+        for (int j = start_y; j < stop_y; j++)
+            for (int i = start_x; i < stop_x; i++)
+            {
+                int index = j * total_dim + i;
+                all_data[index] = data[index];
+            }
+
+        gathered_arrays[name] = std::make_pair(1, all_data);
+    }
+    else
+    {
+        all_data = it->second.second;
+
+        // copy data to all_data
+        for (int j = start_y; j < stop_y; j++)
+            for (int i = start_x; i < stop_x; i++)
+            {
+                int index = j * total_dim + i;
+                all_data[index] = data[index];
+            }
+
+        it->second.first++;
+    }
+
+    if (gathered_arrays[name].first == num_chares * num_chares)
+    {
+        // for (int j = start_y; j < stop_y; j++) {
+        //     for (int i = start_x; i < stop_x; i++) {
+        //         int index = j * total_dim + i;
+        //         printf("Data[%d][%d] = %f\n", j, i, all_data[index]);
+        //     }
+        // }
+
+        // done gathering
+        CcsSendDelayedReply(fetch_reply, sizeof(float) * total_dim * total_dim, all_data);
+        free(all_data);
+        gathered_arrays.erase(name);
+    }
+}
+
 
 Stencil::Stencil(int num_chares_x, int num_chares_y)
 {
+    char dummy;
+    DAG_DONE = &dummy;
+
     index[0] = thisIndex.x;
     index[1] = thisIndex.y;
 
@@ -91,9 +169,20 @@ Stencil::~Stencil()
     }
 }
 
-void Stencil::receive_dag(int size, char* cmd)
+void Stencil::gather(int name)
 {
-    char* graph = cmd + CmiMsgHeaderSizeBytes;
+    Array* array = arrays[name];
+    float* data = array->to_host();
+    // for (int i = 0; i < array->total_size; i++) {
+    //     printf("%f ", data[i]);
+    // }
+    // printf("\n");
+    codegen_proxy[0].gather(name, index[0], index[1], array->shape[0], num_chares[0], array->total_size, data);
+    //delete[] data;
+}
+
+void Stencil::receive_dag(int size, char* graph)
+{
     std::unordered_map<int, DAGNode*> node_cache;
     std::vector<DAGNode*> goals = build_dag(graph, node_cache);
     std::vector<CkFutureID> futures;
@@ -104,6 +193,10 @@ void Stencil::receive_dag(int size, char* cmd)
     }
     // wait for all futures
     CkWaitAllIDs(futures);
+
+    int done = 1;
+    CkCallback cb(CkReductionTarget(CodeGenCache, operation_done), codegen_proxy[0]);
+    contribute(sizeof(int), (void*) &done, CkReduction::sum_int, cb);
 }
 
 CkLocalFuture Stencil::traverse_dag(DAGNode* node)
@@ -114,7 +207,7 @@ CkLocalFuture Stencil::traverse_dag(DAGNode* node)
     if (auto* array_node = dynamic_cast<ArrayDAGNode*>(node))
     {
         // create the array
-        CkSendToLocalFuture(node->future, NULL);
+        CkSendToLocalFuture(node->future, DAG_DONE);
         create_array(array_node->name, array_node->shape);
         node->status = NodeStatus::Visited;
         return node->future;
@@ -122,6 +215,8 @@ CkLocalFuture Stencil::traverse_dag(DAGNode* node)
 
     auto* kernel_node = dynamic_cast<KernelDAGNode*>(node);
     std::vector<CkFutureID> input_futures;
+
+    DEBUG_PRINT("Traversing kernel node %i\n", kernel_node->kernel_id);
 
     for (auto& dep : kernel_node->dependencies)
     {
@@ -142,13 +237,14 @@ CkLocalFuture Stencil::traverse_dag(DAGNode* node)
 
 void Stencil::execute(int kernel_id, std::vector<int> inputs, CkLocalFuture future)
 {
+    DEBUG_PRINT("Execute kernel %i\n", kernel_id);
     // execute the kernel
     // TODO
     // first data transfers
     send_ghost_data();
     //CkSendToLocalFuture(future, true);
     execute_kernel(kernel_id, inputs);
-    CkSendToLocalFuture(future, NULL);
+    CkSendToLocalFuture(future, DAG_DONE);
 }
 
 void Stencil::send_ghost_data()
@@ -159,26 +255,39 @@ void Stencil::execute_kernel(int kernel_id, std::vector<int> inputs)
     Kernel* kernel = codegen_proxy.ckLocalBranch()->kernels[kernel_id];
     std::vector<void*> args;
     std::vector<Array*> array_args;
-    for (int i = 0; i < kernel->num_inputs; i++)
+    for (int i = 0; i < kernel->num_args; i++)
     {
         int input = inputs[i];
         Array* array = arrays[input];
-        args.push_back(array->data);
-        Slice bounds = kernel->get_launch_bounds(input, array);
-        if (i < kernel->num_outputs)
-        {
-            args.push_back(&(bounds.index[0].start));
-            args.push_back(&(bounds.index[0].stop));
-        }
+        args.push_back(&(array->data));
         args.push_back(&(array->strides[0]));
         array_args.push_back(array);
+    }
+
+    std::vector<Slice*> bounds;
+    for (int i = 0; i < kernel->num_outputs; i++)
+    {
+        int output = kernel->outputs[i];
+        Array* array = arrays[output];
+        Slice* bound = new Slice();
+        *bound = kernel->get_launch_bounds(output, array);
+        bounds.push_back(bound);
+        args.push_back(&(bound->index[0].start));
+        args.push_back(&(bound->index[0].stop));
+        args.push_back(&(bound->index[1].start));
+        args.push_back(&(bound->index[1].stop));
+        DEBUG_PRINT("Bounds: (%i : %i), (%i : %i)\n", bound->index[0].start, bound->index[0].stop,
+            bound->index[1].start, bound->index[1].stop);
     }
 
     compute_fun_t fn = codegen_proxy.ckLocalBranch()->lookup(kernel->hash);
     int threads_per_block[2];
     int grid_dims[2];
     kernel->get_launch_params(array_args, threads_per_block, grid_dims);
-    launch_kernel(args.data(), fn, compute_stream, threads_per_block, grid_dims);
+    launch_kernel(args, fn, compute_stream, threads_per_block, grid_dims);
+
+    for (auto& bound : bounds)
+        delete bound;
 }
 
 /*void wait(ck::future<bool> done)
@@ -202,5 +311,5 @@ void Stencil::create_array(int name, std::vector<int> shape)
         local_shape.push_back(local_dim);
     }
     arrays[name] = new Array(name, local_shape);
-    //invoke_init_field(field_array, total_local_size, compute_stream);
+    invoke_init_array(arrays[name]->data, arrays[name]->total_size, compute_stream);
 }

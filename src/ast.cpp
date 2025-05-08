@@ -1,5 +1,8 @@
 #include "ast.hpp"
 
+#define GET_START(slice, shape, i) ((slice).index[i].start < 0 ? ((shape)[i] + (slice).index[i].start) : (slice).index[i].start)
+#define GET_STOP(slice, shape, i) (std::min((slice).index[i].stop <= 0 ? ((shape)[i] + (slice).index[i].stop) : (slice).index[i].stop, (shape)[i]))
+
 Context::Context() : active(-1), prev_active(-1), lhs_slice(nullptr) {}
 
 void Context::set_active(int name)
@@ -31,7 +34,7 @@ void Context::reset_active_kernel()
 
 std::string Context::get_step()
 {
-    return fmt::format("(stride_{})", active); // Placeholder for actual step calculation
+    return fmt::format("stride_{}", active); // Placeholder for actual step calculation
 }
 
 void Context::register_output_slice(Slice& slice)
@@ -113,11 +116,12 @@ std::string OperationNode::generate_code(Context* ctx)
         case Operation::setitem:
         {
             ctx->set_active(static_cast<ArrayNode*>(operands[0])->arg_index);
-            std::string lhs_slice_code = static_cast<SliceNode*>(operands[1])->generate_index_map(ctx);
+            ctx->register_output_slice(static_cast<SliceNode*>(operands[1])->slice);
+            std::string index_map_code = static_cast<SliceNode*>(operands[1])->generate_index_map(ctx);
             ctx->set_lhs_slice(&(static_cast<SliceNode*>(operands[1]))->slice);
-            return fmt::format("if({})\n{\n{}[{}] = {}\n}\n", 
+            return fmt::format("{}\nif({})\n{{\n{}[{}] = {};\n}}\n", index_map_code,
                 static_cast<ArrayNode*>(operands[0])->generate_bounds_check(ctx),
-                operands[0]->generate_code(ctx), lhs_slice_code, operands[2]->generate_code(ctx));
+                operands[0]->generate_code(ctx), operands[1]->generate_code(ctx), operands[2]->generate_code(ctx));
             ctx->reset();
         }
 
@@ -136,12 +140,14 @@ Slice Kernel::get_launch_bounds(int name, Array* array)
 {
     Slice slice = output_slices[name];
     Slice bounds;
-    bounds.index[0].start = slice.index[0].start;
-    bounds.index[0].stop = array->shape[0] + slice.index[0].stop;
+    DEBUG_PRINT("Calculating bounds on: (%i : %i), (%i : %i)\n", slice.index[0].start, slice.index[0].stop,
+        slice.index[1].start, slice.index[1].stop);
+    bounds.index[0].start = GET_START(slice, array->shape, 0);
+    bounds.index[0].stop = GET_STOP(slice, array->shape, 0);
     //int stepx = slice.index[0].step;
 
-    bounds.index[1].start = slice.index[1].start;
-    bounds.index[1].stop = array->shape[1] + slice.index[1].stop;
+    bounds.index[1].start = GET_START(slice, array->shape, 1);
+    bounds.index[1].stop = GET_STOP(slice, array->shape, 1);
     //int stepy = slice.index[1].step;
 
     return bounds;
@@ -157,12 +163,12 @@ void Kernel::get_launch_params(std::vector<Array*> &args, int* threads_per_block
         int index = entry.first;
         Slice slice = entry.second;
         Array* array = args[index];
-        int startx = slice.index[0].start;
-        int stopx = array->shape[0] + slice.index[0].stop;
+        int startx = GET_START(slice, array->shape, 0);
+        int stopx = GET_STOP(slice, array->shape, 0);
         int stepx = slice.index[0].step;
 
-        int starty = slice.index[1].start;
-        int stopy = array->shape[1] + slice.index[1].stop;
+        int starty = GET_START(slice, array->shape, 1);
+        int stopy = GET_STOP(slice, array->shape, 1);
         int stepy = slice.index[1].step;
 
         int num_threadsx = (stopx - startx) / stepx;
@@ -191,27 +197,35 @@ std::string Kernel::generate_body(Context* ctx)
     std::string code = "";
     for (auto& node : nodes)
     {
-        code += fmt::format("\n{\n{}\n}\n", node->generate_code(ctx));
+        code += fmt::format("\n{{\n{}\n}}\n", node->generate_code(ctx));
     }
+    return code;
+}
+
+std::string Kernel::generate_debug(Context* ctx)
+{
+    //std::string code = "if(tx == 0 && ty == 0) printf(\"Kernel called\");\n";
+    std::string code = "";
     return code;
 }
 
 std::string Kernel::generate_arguments(Context* ctx)
 {
-    std::string code = "";
-    for (int i = 0; i < num_outputs; i++)
+    std::ostringstream oss;
+
+    for (int i = 0; i < num_args; i++)
     {
-        code += fmt::format("a_{}, startx_{}, stopx_{}, starty_{}, stopy_{}, stride_{}", i, i, i, i, i, i);
-        if (i < num_inputs - 1)
-            code += ", ";
+        oss << fmt::format("float* a_{0}, int stride_{0}, ", i);
     }
 
-    for (int i = num_outputs; i < num_inputs; i++)
+    for (int i = 0; i < num_outputs; i++)
     {
-        code += fmt::format("a_{}, stride_{}", i, i);
-        if (i < num_inputs - 1)
-            code += ", ";
+        oss << fmt::format("int startx_{0}, int stopx_{0}, int starty_{0}, int stopy_{0}", outputs[i]);
+        if (i < num_outputs - 1)
+            oss << ", ";
     }
+
+    return oss.str();
 }
 
 std::string Kernel::generate_signature(Context* ctx)
@@ -222,11 +236,11 @@ std::string Kernel::generate_signature(Context* ctx)
 std::string Kernel::generate_code(Context* ctx)
 {
     ctx->set_active_kernel(this);
-    return fmt::format("{}\n{\n{}\n{}\n}", generate_signature(ctx), generate_variable_declarations(ctx), generate_body(ctx));
+    return fmt::format("{}\n{{\n{}\n{}\n{}\n}}", generate_signature(ctx), generate_variable_declarations(ctx), generate_debug(ctx), generate_body(ctx));
     ctx->reset_active_kernel();
 }
 
-ASTNode* build_noop(char* cmd)
+ASTNode* build_noop(char* &cmd)
 {
     OperandType operand_type = lookup_type(extract<uint8_t>(cmd));
     switch (operand_type)
@@ -236,6 +250,7 @@ ASTNode* build_noop(char* cmd)
             int value = extract<int>(cmd);
             IntNode* int_node = new IntNode();
             int_node->value = value;
+            DEBUG_PRINT("IntNode: %i\n", int_node->value);
             return int_node;
         }
         case OperandType::float_t:
@@ -243,6 +258,7 @@ ASTNode* build_noop(char* cmd)
             float value = extract<float>(cmd);
             FloatNode* float_node = new FloatNode();
             float_node->value = value;
+            DEBUG_PRINT("FloatNode: %f\n", float_node->value);
             return float_node;
         }
         case OperandType::array:
@@ -250,6 +266,7 @@ ASTNode* build_noop(char* cmd)
             int arg_index = extract<int>(cmd);
             ArrayNode* array_node = new ArrayNode();
             array_node->arg_index = arg_index;
+            DEBUG_PRINT("ArrayNode: %i\n", array_node->arg_index);
             return array_node;
         }
         case OperandType::tuple_int:
@@ -259,6 +276,7 @@ ASTNode* build_noop(char* cmd)
             TupleNode* tuple_node = new TupleNode();
             tuple_node->value[0] = value1;
             tuple_node->value[1] = value2;
+            DEBUG_PRINT("TupleNode: (%i, %i)\n", tuple_node->value[0], tuple_node->value[1]);
             return tuple_node;
         }
         case OperandType::tuple_slice:
@@ -266,6 +284,13 @@ ASTNode* build_noop(char* cmd)
             Slice key = get_slice(cmd);
             SliceNode* slice_node = new SliceNode();
             slice_node->slice = key;
+            DEBUG_PRINT("SliceNode: (%i:%i:%i, %i:%i:%i)\n", 
+                slice_node->slice.index[0].start,
+                slice_node->slice.index[0].stop,
+                slice_node->slice.index[0].step,
+                slice_node->slice.index[1].start,
+                slice_node->slice.index[1].stop,
+                slice_node->slice.index[1].step);
             return slice_node;
         }
         default:
@@ -275,9 +300,10 @@ ASTNode* build_noop(char* cmd)
     }
 }
 
-ASTNode* build_ast(char* cmd)
+ASTNode* build_ast(char* &cmd)
 {
     Operation oper = lookup_operation(extract<uint8_t>(cmd));
+    int num_operands = extract<int>(cmd);
     
     switch (oper)
     {
@@ -293,7 +319,9 @@ ASTNode* build_ast(char* cmd)
         {
             OperationNode* op_node = new OperationNode();
             op_node->operation = oper;
-            op_node->operands.push_back(build_ast(cmd));
+            DEBUG_PRINT("OperationNode: %s\n", get_op_string(op_node->operation).c_str());
+            for (int i = 0; i < num_operands; i++)
+                op_node->operands.push_back(build_ast(cmd));
             return op_node;
         }
         default:
@@ -305,15 +333,27 @@ ASTNode* build_ast(char* cmd)
     return nullptr;
 }
 
-Kernel* build_kernel(char* cmd)
+Kernel* build_kernel(char* &cmd)
 {
     Kernel* kernel = new Kernel();
     kernel->kernel_id = extract<int>(cmd);
+    DEBUG_PRINT("=============== Building new kernel ===============\n");
+    DEBUG_PRINT("Kernel ID: %i\n", kernel->kernel_id);
     int len_cmd = extract<int>(cmd);
+    DEBUG_PRINT("Command length: %i\n", len_cmd);
     std::string hash_string(cmd, len_cmd);
     kernel->hash = std::hash<std::string>{}(hash_string);
-    kernel->num_inputs = extract<int>(cmd);
+    DEBUG_PRINT("Hash: %zu\n", kernel->hash);
+    kernel->num_args = extract<int>(cmd);
+    DEBUG_PRINT("Num inputs: %i\n", kernel->num_args);
     kernel->num_outputs = extract<int>(cmd);
+    DEBUG_PRINT("Num outputs: %i\n", kernel->num_outputs);
+    for (int i = 0; i < kernel->num_outputs; i++)
+    {
+        int output = extract<int>(cmd);
+        kernel->outputs.push_back(output);
+        //DEBUG_PRINT("Output %i: %i\n", i, output);
+    }
     int num_nodes = extract<int>(cmd);
     for (int i = 0; i < num_nodes; i++)
     {
@@ -323,9 +363,9 @@ Kernel* build_kernel(char* cmd)
     return kernel;
 }
 
-void choose_optimal_grid(int* &threads_per_block, int nx, int ny)
+void choose_optimal_grid(int* threads_per_block, int nx, int ny)
 {
     // FIXME - use a better heuristic later
-    threads_per_block[0] = 32;
-    threads_per_block[1] = 32;
+    threads_per_block[0] = 16;
+    threads_per_block[1] = 16;
 }

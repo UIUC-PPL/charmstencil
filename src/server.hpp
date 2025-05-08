@@ -6,6 +6,8 @@
 
 
 CProxy_Stencil stencil;
+CcsDelayedReply operation_reply;
+CcsDelayedReply fetch_reply;
 
 
 class Server
@@ -32,12 +34,19 @@ public:
 #endif
         char* cmd = msg + CmiMsgHeaderSizeBytes;
         int size = extract<int>(cmd);
+        //char* msg_cpy = (char*) malloc(size);
+        operation_reply = CcsDelayReply();
+        //memcpy(msg_cpy, cmd, size);
         codegen_proxy.receive(size, cmd, stencil);
-        CcsSendReply(0, NULL);
+        //CcsSendReply(1, &res);
     }
 
     static void fetch_handler(char* msg)
     {
+        char* cmd = msg + CmiMsgHeaderSizeBytes;
+        int name = extract<int>(cmd);
+        fetch_reply = CcsDelayReply();
+        stencil.gather(name);
     }
 
     static void connection_handler(char* msg)
@@ -45,7 +54,9 @@ public:
         char* cmd = msg + CmiMsgHeaderSizeBytes;
         int odf = extract<int>(cmd);
         create_stencil(odf);
-        CcsSendReply(0, NULL);
+        CkPrintf("Connected to server odf = %i\n", odf);
+        char res;
+        CcsSendReply(1, &res);
     }
 
     static void disconnection_handler(char* msg)
@@ -55,7 +66,8 @@ public:
 #ifndef NDEBUG
         CkPrintf("Disconnected from server\n");
 #endif
-        CcsSendReply(0, NULL);
+        char res;
+        CcsSendReply(1, &res);
     }
 
     static CProxy_Stencil create_stencil(int odf)
@@ -69,7 +81,7 @@ public:
 
 
 #ifndef NDEBUG
-        CkPrintf("Creating stencil");
+        CkPrintf("Creating stencil\n");
 #endif
 
         stencil = CProxy_Stencil::ckNew(num_chare_x, num_chare_y, num_chare_x, num_chare_y);

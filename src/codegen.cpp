@@ -4,7 +4,8 @@ static std::string get_kernel_header()
 {
     return "#include <iostream>\n"
            "#include <vector>\n"
-           "#include <cuda.h>\n\n";
+           "#include <cuda.h>\n\n"
+           "#define IDX2D(y, x, stride) ((y) * (stride) + (x))\n\n";
 }
 
 void write_kernel(FILE* genfile, Kernel* knl)
@@ -17,7 +18,8 @@ void write_kernel(FILE* genfile, Kernel* knl)
 
 void generate_kernel(Kernel* knl, int suffix)
 {
-    std::string filename = fmt::format("kernel_{}_{}", knl->kernel_id, suffix);
+    std::string filename = fmt::format("generated/kernel_{}_{}", knl->hash, suffix);
+    DEBUG_PRINT("Generating kernel %s\n", filename.c_str());
     FILE* genfile = fopen((filename + ".cu").c_str(), "w");
     write_kernel(genfile, knl);
     fclose(genfile);

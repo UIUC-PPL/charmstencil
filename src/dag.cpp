@@ -7,17 +7,20 @@ DAGNode::DAGNode()
     future = CkLocalFuture();
 }
 
-std::vector<DAGNode*> build_dag(char* cmd, std::unordered_map<int, DAGNode*>& node_cache)
+std::vector<DAGNode*> build_dag(char* &cmd, std::unordered_map<int, DAGNode*>& node_cache)
 {
     // this is done in 2 steps
     // first build the node cache
     // then read the dependencies and build the dag
 
+    DEBUG_PRINT("========================= Building DAG =========================\n");
     int num_nodes = extract<int>(cmd);
+    DEBUG_PRINT("Num nodes: %i\n", num_nodes);
 
     for (int i = 0; i < num_nodes; i++)
     {
         int node_type = extract<int>(cmd);
+        DEBUG_PRINT("Node type: %i\n", node_type);
         if (node_type == static_cast<int>(DAGNodeType::Array))
         {
             ArrayDAGNode* node = new ArrayDAGNode();
@@ -27,6 +30,7 @@ std::vector<DAGNode*> build_dag(char* cmd, std::unordered_map<int, DAGNode*>& no
             for (int j = 0; j < ndims; j++)
                 node->shape.push_back(extract<int>(cmd));
             node_cache[node->node_id] = node;
+            DEBUG_PRINT("Array node: %i\n", node->name);
         }
         else if (node_type == static_cast<int>(DAGNodeType::Kernel))
         {
@@ -37,6 +41,7 @@ std::vector<DAGNode*> build_dag(char* cmd, std::unordered_map<int, DAGNode*>& no
             for (int j = 0; j < num_inputs; j++)
                 node->inputs.push_back(extract<int>(cmd));
             node_cache[node->node_id] = node;
+            DEBUG_PRINT("Kernel node: %i\n", node->kernel_id);
         }
     }
 

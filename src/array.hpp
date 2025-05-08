@@ -8,6 +8,7 @@ class Array
 {
 public:
     int name;
+    int total_size;
     float* data;
     std::vector<int> shape;
     std::vector<int> strides;
@@ -20,12 +21,20 @@ public:
         strides[shape.size() - 1] = 1;
         for (int i = shape.size() - 2; i >= 0; i--)
             strides[i] = strides[i + 1] * shape[i + 1];
-        hapiCheck(cudaMalloc((void**) &data, sizeof(float) * shape[0] * shape[1]));
+        total_size = shape[0] * shape[1];
+        hapiCheck(cudaMalloc((void**) &data, sizeof(float) * total_size));
     }
 
     ~Array()
     {
         hapiCheck(cudaFree(data));
+    }
+
+    float* to_host()
+    {
+        float* host_data = new float[total_size];
+        hapiCheck(cudaMemcpy(host_data, data, sizeof(float) * total_size, cudaMemcpyDeviceToHost));
+        return host_data;
     }
 };
 #endif // ARRAY_HPP

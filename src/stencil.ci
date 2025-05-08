@@ -5,6 +5,8 @@ module stencil
     array [2D] Stencil
     {
         entry Stencil(int, int);
+
+        entry void gather(int name);
             
         entry void receive_dag(int size, char cmd[size]);
 
@@ -20,5 +22,11 @@ module stencil
         entry [reductiontarget] void end_time(double time);
 
         entry void receive(int size, char msg[size], CProxy_Stencil stencil_proxy);
+
+        entry [reductiontarget] void send_dag(int done);
+
+        entry [reductiontarget] void operation_done(int done);
+
+        entry void gather(int name, int index_x, int index_y, int local_dim, int num_chares, int data_size, float data[data_size]);
     };
 }
