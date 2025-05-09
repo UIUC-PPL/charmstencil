@@ -20,7 +20,8 @@ public:
     int node_id;
     bool is_leaf;
     NodeStatus status;
-    CkLocalFuture future;
+    bool done;
+    std::vector<DAGNode*> waiting;
 
     virtual ~DAGNode() = default;
 

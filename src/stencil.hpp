@@ -2,6 +2,7 @@
 #define STENCIL_HPP
 #include <vector>
 #include <cstring>
+#include <unordered_set>
 #include "codegen.hpp"
 #include "dag.hpp"
 #include "array.hpp"
@@ -97,6 +98,10 @@ private:
     char* DAG_DONE;
 
     std::unordered_map<int, int> ghost_info;
+
+    std::unordered_map<int, DAGNode*> node_cache;
+
+    std::unordered_set<int> goals_waiting;
 public:    
     // expects that the number of dimensions and length in each 
     // dimension will be specified at the time of creation
@@ -114,17 +119,19 @@ public:
 
     ~Stencil();
 
+    void mark_done(DAGNode* node);
+
     void gather(int name);
 
     void receive_dag(int size, char* cmd);
 
-    CkLocalFuture traverse_dag(DAGNode* node);
+    bool traverse_dag(DAGNode* node);
 
-    void execute(int kernel_id, std::vector<int> inputs, CkLocalFuture future);
+    void execute(KernelDAGNode* node);
 
-    void send_ghost_data();
+    void send_ghost_data(KernelDAGNode* node);
 
-    void execute_kernel(int kernel_id, std::vector<int> inputs);
+    void execute_kernel(KernelDAGNode* node);
 
     void create_array(int name, std::vector<int> shape);
 };

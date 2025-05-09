@@ -4,7 +4,7 @@ DAGNode::DAGNode()
 {
     is_leaf = false;
     status = NodeStatus::UnVisited;
-    future = CkLocalFuture();
+    done = false;
 }
 
 std::vector<DAGNode*> build_dag(char* &cmd, std::unordered_map<int, DAGNode*>& node_cache,

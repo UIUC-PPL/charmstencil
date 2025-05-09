@@ -47,5 +47,8 @@ server.out: server.o stencilCUDA.o stencil.o ast.o utils.o codegen.o dag.o
 run-server: server.out
 	LD_LIBRARY_PATH=/home/sb56/anaconda3/envs/charm/lib ./charmrun +p4 ./server.out ++server ++server-port 10000
 
-clean:
+clean: clean-gen
 	rm *.decl.h *.def.h *.out *.o charmrun
+
+clean-gen:
+	rm generated/*

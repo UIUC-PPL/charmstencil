@@ -189,81 +189,105 @@ void Stencil::gather(int name)
 
 void Stencil::receive_dag(int size, char* graph)
 {
-    std::unordered_map<int, DAGNode*> node_cache;
     std::vector<DAGNode*> goals = build_dag(graph, node_cache, ghost_info);
-    std::vector<CkFutureID> futures;
     for (auto& goal : goals)
     {
-        CkLocalFuture fut = traverse_dag(goal);
-        futures.push_back(fut.id);
+        bool is_done = traverse_dag(goal);
+        if (!is_done)
+            goals_waiting.insert(goal->node_id);
     }
     // wait for all futures
-    CkWaitAllIDs(futures);
 
-    int done = 1;
-    CkCallback cb(CkReductionTarget(CodeGenCache, operation_done), codegen_proxy[0]);
-    contribute(sizeof(int), (void*) &done, CkReduction::sum_int, cb);
+    if (goals_waiting.empty())
+    {
+        int done = 1;
+        CkCallback cb(CkReductionTarget(CodeGenCache, operation_done), codegen_proxy[0]);
+        contribute(sizeof(int), (void*) &done, CkReduction::sum_int, cb);
+    }
 }
 
-CkLocalFuture Stencil::traverse_dag(DAGNode* node)
+void Stencil::mark_done(DAGNode* node)
+{
+    node->done = true;
+    while(!node->waiting.empty())
+    {
+        DAGNode* waiting = node->waiting.back();
+        node->waiting.pop_back();
+        traverse_dag(waiting);
+    }
+
+    if (goals_waiting.find(node->node_id) != goals_waiting.end())
+    {
+        goals_waiting.erase(node->node_id);
+        // send a message to the codegen cache
+        if (goals_waiting.empty())
+        {
+            int done = 1;
+            CkCallback cb(CkReductionTarget(CodeGenCache, operation_done), codegen_proxy[0]);
+            contribute(sizeof(int), (void*) &done, CkReduction::sum_int, cb);
+        }
+    }
+}
+
+bool Stencil::traverse_dag(DAGNode* node)
 {
     if (node->status == NodeStatus::Visited)
-        return node->future;
+        return node->done;
 
     if (auto* array_node = dynamic_cast<ArrayDAGNode*>(node))
     {
         // create the array
-        CkSendToLocalFuture(node->future, DAG_DONE);
         create_array(array_node->name, array_node->shape);
         node->status = NodeStatus::Visited;
-        return node->future;
+        mark_done(node);
+        return node->done;
     }
 
     auto* kernel_node = dynamic_cast<KernelDAGNode*>(node);
-    std::vector<CkFutureID> input_futures;
 
     DEBUG_PRINT("Traversing kernel node %i\n", kernel_node->kernel_id);
 
     for (auto& dep : kernel_node->dependencies)
     {
         // traverse the dependencies
-        CkLocalFuture inp_fut = traverse_dag(dep);
-        // add the future to the inputs of the kernel
-        input_futures.push_back(inp_fut.id);
+        if (!traverse_dag(dep))
+        {
+            // if the dependency is not done, return false
+            dep->waiting.push_back(node);
+            return false;
+        }
     }
 
-    // wait for all input_futures
-    CkWaitAllIDs(input_futures);
-
     // execute this node and return a future
-    thisProxy[thisIndex].execute(kernel_node->kernel_id, kernel_node->inputs, node->future);
+    execute(kernel_node);
     kernel_node->status = NodeStatus::Visited;
-    return node->future;
+    return kernel_node->done;
 }
 
-void Stencil::execute(int kernel_id, std::vector<int> inputs, CkLocalFuture future)
+void Stencil::execute(KernelDAGNode* node)
 {
-    DEBUG_PRINT("Execute kernel %i\n", kernel_id);
+    DEBUG_PRINT("Execute kernel %i\n", node->kernel_id);
     // execute the kernel
     // TODO
     // first data transfers
-    send_ghost_data();
+    send_ghost_data(node);
     //CkSendToLocalFuture(future, true);
-    execute_kernel(kernel_id, inputs);
-    CkSendToLocalFuture(future, DAG_DONE);
+    execute_kernel(node);
 }
 
-void Stencil::send_ghost_data()
-{}
-
-void Stencil::execute_kernel(int kernel_id, std::vector<int> inputs)
+void Stencil::send_ghost_data(KernelDAGNode* node)
 {
-    Kernel* kernel = codegen_proxy.ckLocalBranch()->kernels[kernel_id];
+    // data transfer required for this node
+}
+
+void Stencil::execute_kernel(KernelDAGNode* node)
+{
+    Kernel* kernel = codegen_proxy.ckLocalBranch()->kernels[node->kernel_id];
     std::vector<void*> args;
     std::vector<Array*> array_args;
     for (int i = 0; i < kernel->num_args; i++)
     {
-        int input = inputs[i];
+        int input = node->inputs[i];
         Array* array = arrays[input];
         args.push_back(&(array->data));
         args.push_back(&(array->strides[0]));
@@ -300,7 +324,10 @@ void Stencil::execute_kernel(int kernel_id, std::vector<int> inputs)
         int grid_dims[2];
         kernel->get_launch_params(bounds, threads_per_block, grid_dims);
         launch_kernel(args, fn, compute_stream, threads_per_block, grid_dims);
+        hapiAddCallback(compute_stream, CkCallbackResumeThread());
     }
+
+    mark_done(node);
 
     for (auto& bound : bounds)
         delete bound;

@@ -8,9 +8,7 @@ module stencil
 
         entry void gather(int name);
             
-        entry void receive_dag(int size, char cmd[size]);
-
-        entry [threaded] void execute(int kernel_id, std::vector<int> inputs, CkLocalFuture future);
+        entry [threaded] void receive_dag(int size, char cmd[size]);
     };
 
     nodegroup CodeGenCache
