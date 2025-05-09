@@ -4,7 +4,7 @@ DAGNode::DAGNode()
 {
     is_leaf = false;
     status = NodeStatus::UnVisited;
-    future = CkLocalFuture();
+    future = CkCreateLocalFuture();
 }
 
 std::vector<DAGNode*> build_dag(char* &cmd, std::unordered_map<int, DAGNode*>& node_cache,
@@ -60,6 +60,7 @@ std::vector<DAGNode*> build_dag(char* &cmd, std::unordered_map<int, DAGNode*>& n
     }
 
     int num_goals = extract<int>(cmd);
+    DEBUG_PRINT("Num goals: %i\n", num_goals);
     std::vector<DAGNode*> goals;
     for (int i = 0; i < num_goals; i++)
     {

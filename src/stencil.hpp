@@ -53,6 +53,18 @@ extern CcsDelayedReply operation_reply;
 extern CcsDelayedReply fetch_reply;
 
 
+class KernelCallbackMsg : public CMessage_KernelCallbackMsg
+{
+public:
+    CkLocalFuture future;
+
+    KernelCallbackMsg(CkLocalFuture future_)
+        : CMessage_KernelCallbackMsg()
+        , future(future_)
+    {
+    }
+};
+
 class CodeGenCache : public CBase_CodeGenCache
 {
 private:
@@ -124,7 +136,9 @@ public:
 
     void send_ghost_data();
 
-    void execute_kernel(int kernel_id, std::vector<int> inputs);
+    void kernel_done(KernelCallbackMsg* msg);
+
+    void execute_kernel(int kernel_id, std::vector<int> inputs, CkLocalFuture future);
 
     void create_array(int name, std::vector<int> shape);
 };

@@ -48,4 +48,4 @@ run-server: server.out
 	LD_LIBRARY_PATH=/home/sb56/anaconda3/envs/charm/lib ./charmrun +p4 ./server.out ++server ++server-port 10000
 
 clean:
-	rm *.decl.h *.def.h *.out *.o charmrun
+	rm *.decl.h *.def.h *.out *.o charmrun generated/*

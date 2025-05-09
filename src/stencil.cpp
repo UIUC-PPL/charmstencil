@@ -196,13 +196,16 @@ void Stencil::receive_dag(int size, char* graph)
     {
         CkLocalFuture fut = traverse_dag(goal);
         futures.push_back(fut.id);
+        DEBUG_PRINT("DEBUG> %i > Waiting for future %i\n", CkMyPe(), fut.id);
     }
     // wait for all futures
     CkWaitAllIDs(futures);
 
-    int done = 1;
-    CkCallback cb(CkReductionTarget(CodeGenCache, operation_done), codegen_proxy[0]);
-    contribute(sizeof(int), (void*) &done, CkReduction::sum_int, cb);
+    DEBUG_PRINT("DEBUG> %i DONE WAITING!!!\n", CkMyPe());
+
+    //int done = 1;
+    //CkCallback cb(CkReductionTarget(CodeGenCache, operation_done), codegen_proxy[0]);
+    //contribute(sizeof(int), (void*) &done, CkReduction::sum_int, cb);
 }
 
 CkLocalFuture Stencil::traverse_dag(DAGNode* node)
@@ -214,6 +217,7 @@ CkLocalFuture Stencil::traverse_dag(DAGNode* node)
     {
         // create the array
         CkSendToLocalFuture(node->future, DAG_DONE);
+        DEBUG_PRINT("%i> Send to local future %i\n", CkMyPe(), node->future.id);
         create_array(array_node->name, array_node->shape);
         node->status = NodeStatus::Visited;
         return node->future;
@@ -233,7 +237,7 @@ CkLocalFuture Stencil::traverse_dag(DAGNode* node)
     }
 
     // wait for all input_futures
-    CkWaitAllIDs(input_futures);
+    //CkWaitAllIDs(input_futures);
 
     // execute this node and return a future
     thisProxy[thisIndex].execute(kernel_node->kernel_id, kernel_node->inputs, node->future);
@@ -249,14 +253,18 @@ void Stencil::execute(int kernel_id, std::vector<int> inputs, CkLocalFuture futu
     // first data transfers
     send_ghost_data();
     //CkSendToLocalFuture(future, true);
-    execute_kernel(kernel_id, inputs);
-    CkSendToLocalFuture(future, DAG_DONE);
+    execute_kernel(kernel_id, inputs, future);
 }
 
 void Stencil::send_ghost_data()
 {}
 
-void Stencil::execute_kernel(int kernel_id, std::vector<int> inputs)
+void Stencil::kernel_done(KernelCallbackMsg* msg)
+{
+    CkSendToLocalFuture(msg->future, DAG_DONE);
+}
+
+void Stencil::execute_kernel(int kernel_id, std::vector<int> inputs, CkLocalFuture future)
 {
     Kernel* kernel = codegen_proxy.ckLocalBranch()->kernels[kernel_id];
     std::vector<void*> args;
@@ -300,6 +308,14 @@ void Stencil::execute_kernel(int kernel_id, std::vector<int> inputs)
         int grid_dims[2];
         kernel->get_launch_params(bounds, threads_per_block, grid_dims);
         launch_kernel(args, fn, compute_stream, threads_per_block, grid_dims);
+        //KernelCallbackMsg* msg = new KernelCallbackMsg(future);
+        //CkCallback* cb = new CkCallback(CkIndex_Stencil::kernel_done(NULL), thisProxy[thisIndex]);
+        //hapiAddCallback(compute_stream, cb, msg);
+    }
+    else
+    {
+        CkSendToLocalFuture(future, DAG_DONE);
+        DEBUG_PRINT("Chare (%i, %i)> No need to execute kernel %i\n", index[0], index[1], kernel_id);
     }
 
     for (auto& bound : bounds)

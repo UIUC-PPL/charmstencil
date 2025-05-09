@@ -185,18 +185,6 @@ void invoke_init_array(float* array, int total_size, cudaStream_t stream)
     hapiCheck(cudaPeekAtLastError());
 }
 
-void* get_module(std::string &fatbin_file)
-{
-    std::ifstream file(fatbin_file.c_str(), std::ios::binary | std::ios::ate);
-    if (file.fail())
-        CkAbort("File could not be opened\n");
-    std::streamsize size = file.tellg();
-    file.seekg(0, std::ios::beg);
-    void* buffer = malloc(size);
-    file.read((char*) buffer, size);
-    return buffer;
-}
-
 CUfunction load_kernel(size_t &hash, int suffix)
 {
     CUmodule cumodule;
@@ -222,6 +210,7 @@ void launch_kernel(std::vector<void*> args, CUfunction& compute_kernel, cudaStre
         threads_per_block[0], threads_per_block[1], 1,
         grid[0], grid[1], 1,
         0, stream, args.data(), NULL));
-    cuStreamSynchronize(stream);
-    hapiCheck(cudaPeekAtLastError());
+    //cuStreamSynchronize(stream);
+    //hapiAddCallback(stream, cb);
+    //hapiCheck(cudaPeekAtLastError());
 }
