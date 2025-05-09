@@ -7,7 +7,8 @@ DAGNode::DAGNode()
     future = CkLocalFuture();
 }
 
-std::vector<DAGNode*> build_dag(char* &cmd, std::unordered_map<int, DAGNode*>& node_cache)
+std::vector<DAGNode*> build_dag(char* &cmd, std::unordered_map<int, DAGNode*>& node_cache,
+    std::unordered_map<int, int> &ghost_info)
 {
     // this is done in 2 steps
     // first build the node cache
@@ -27,6 +28,7 @@ std::vector<DAGNode*> build_dag(char* &cmd, std::unordered_map<int, DAGNode*>& n
             node->node_id = extract<int>(cmd);
             node->name = extract<int>(cmd);
             int ndims = extract<int>(cmd);
+            assert(ndims == 2);
             for (int j = 0; j < ndims; j++)
                 node->shape.push_back(extract<int>(cmd));
             node_cache[node->node_id] = node;
@@ -39,7 +41,10 @@ std::vector<DAGNode*> build_dag(char* &cmd, std::unordered_map<int, DAGNode*>& n
             node->kernel_id = extract<int>(cmd);
             int num_inputs = extract<int>(cmd);
             for (int j = 0; j < num_inputs; j++)
+            {
                 node->inputs.push_back(extract<int>(cmd));
+                ghost_info[node->inputs[j]] = 1; // FIXME this is hardcoded to 1 for now
+            }
             node_cache[node->node_id] = node;
             DEBUG_PRINT("Kernel node: %i\n", node->kernel_id);
         }

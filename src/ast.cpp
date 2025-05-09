@@ -61,13 +61,13 @@ std::string SliceNode::generate_code(Context* ctx)
     // if this is a setitem operation
     if (ctx->lhs_slice == nullptr)
     {
-        return fmt::format("IDX2D(idx, idy, {})", ctx->get_step());
+        return fmt::format("IDX2D(idy, idx, {})", ctx->get_step());
     }
     else
     {
         Slice offset = slice.calculate_relative(*(ctx->lhs_slice));
-        return fmt::format("IDX2D((idx + {}) * {}, (idy + {}) * {}, {})", offset.index[0].start, offset.index[0].step, 
-            offset.index[1].start, offset.index[1].step, ctx->get_step());
+        return fmt::format("IDX2D((idy + {}) * {}, (idx + {}) * {}, {})", offset.index[1].start, offset.index[1].step, 
+            offset.index[0].start, offset.index[0].step, ctx->get_step());
     }
 }
 
@@ -136,43 +136,57 @@ void Kernel::register_output_slice(int name, Slice& slice)
     output_slices[name] = slice;
 }
 
-Slice Kernel::get_launch_bounds(int name, Array* array)
+Slice Kernel::get_launch_bounds(int name, Array* array, int* chare_index)
 {
     Slice slice = output_slices[name];
-    Slice bounds;
-    DEBUG_PRINT("Calculating bounds on: (%i : %i), (%i : %i)\n", slice.index[0].start, slice.index[0].stop,
+    Slice global_bounds;
+    DEBUG_PRINT("Calculating global_bounds on: (%i : %i), (%i : %i)\n", slice.index[0].start, slice.index[0].stop,
         slice.index[1].start, slice.index[1].stop);
-    bounds.index[0].start = GET_START(slice, array->shape, 0);
-    bounds.index[0].stop = GET_STOP(slice, array->shape, 0);
+    global_bounds.index[0].start = GET_START(slice, array->global_shape, 0);
+    global_bounds.index[0].stop = GET_STOP(slice, array->global_shape, 0);
     //int stepx = slice.index[0].step;
 
-    bounds.index[1].start = GET_START(slice, array->shape, 1);
-    bounds.index[1].stop = GET_STOP(slice, array->shape, 1);
+    global_bounds.index[1].start = GET_START(slice, array->global_shape, 1);
+    global_bounds.index[1].stop = GET_STOP(slice, array->global_shape, 1);
     //int stepy = slice.index[1].step;
 
-    return bounds;
+    // now find what indices of the global bound belong to this chare
+    // FIXME assumption all arrays are square
+
+    int chare_startx = chare_index[0] * array->local_shape[0];
+    int chare_stopx = (chare_index[0] + 1) * array->local_shape[0];
+    int chare_starty = chare_index[1] * array->local_shape[1];
+    int chare_stopy = (chare_index[1] + 1) * array->local_shape[1];
+
+    //DEBUG_PRINT("DEBUG AST> (%i, %i) > (%i, %i) > (%i, %i)\n", chare_index[0], chare_index[1], chare_startx, chare_stopx, chare_starty, chare_stopy);
+
+    Slice local_bounds;
+    local_bounds.index[0].start = std::max(global_bounds.index[0].start, chare_startx);
+    local_bounds.index[0].stop = std::max(std::min(global_bounds.index[0].stop, chare_stopx), local_bounds.index[0].start);
+    local_bounds.index[0].step = slice.index[0].step;
+
+    local_bounds.index[0].start += (array->ghost_depth - chare_startx);
+    local_bounds.index[0].stop += (array->ghost_depth - chare_startx);
+
+    local_bounds.index[1].start = std::max(global_bounds.index[1].start, chare_starty);
+    local_bounds.index[1].stop = std::max(std::min(global_bounds.index[1].stop, chare_stopy), local_bounds.index[1].start);
+    local_bounds.index[1].step = slice.index[1].step;
+
+    local_bounds.index[1].start += (array->ghost_depth - chare_starty);
+    local_bounds.index[1].stop += (array->ghost_depth - chare_starty);
+
+    return local_bounds;
 }
 
-void Kernel::get_launch_params(std::vector<Array*> &args, int* threads_per_block,
+void Kernel::get_launch_params(std::vector<Slice*> &bounds, int* threads_per_block,
      int* grid_dims)
 {
     int global_ntx = 0;
     int global_nty = 0;
-    for(const auto& entry : output_slices)
+    for(const auto& bound : bounds)
     {
-        int index = entry.first;
-        Slice slice = entry.second;
-        Array* array = args[index];
-        int startx = GET_START(slice, array->shape, 0);
-        int stopx = GET_STOP(slice, array->shape, 0);
-        int stepx = slice.index[0].step;
-
-        int starty = GET_START(slice, array->shape, 1);
-        int stopy = GET_STOP(slice, array->shape, 1);
-        int stepy = slice.index[1].step;
-
-        int num_threadsx = (stopx - startx) / stepx;
-        int num_threadsy = (stopy - starty) / stepy;
+        int num_threadsx = (bound->index[0].stop - bound->index[0].start) / bound->index[0].step;
+        int num_threadsy = (bound->index[1].stop - bound->index[1].start) / bound->index[1].step;
         global_ntx = std::max(global_ntx, num_threadsx);
         global_nty = std::max(global_nty, num_threadsy);
     }

@@ -74,6 +74,8 @@ void CodeGenCache::gather(int name, int index_x, int index_y, int local_dim, int
     int stop_x = start_x + local_dim;
     int stop_y = start_y + local_dim;
 
+    //DEBUG_PRINT("DEBUG> (%i, %i) > (%i, %i) > (%i, %i)\n", index_x, index_y, start_x, stop_x, start_y, stop_y);
+
     auto it = gathered_arrays.find(name);
     float* all_data;
     if (it == gathered_arrays.end())
@@ -81,11 +83,12 @@ void CodeGenCache::gather(int name, int index_x, int index_y, int local_dim, int
         all_data = (float*) malloc(sizeof(float) * total_dim * total_dim);
 
         // copy data to all_data
-        for (int j = start_y; j < stop_y; j++)
-            for (int i = start_x; i < stop_x; i++)
+        for (int j = 0; j < local_dim; j++)
+            for (int i = 0; i < local_dim; i++)
             {
-                int index = j * total_dim + i;
-                all_data[index] = data[index];
+                int local_index = j * local_dim + i;
+                int global_index = (j + start_y) * total_dim + (i + start_x);
+                all_data[global_index] = data[local_index];
             }
 
         gathered_arrays[name] = std::make_pair(1, all_data);
@@ -95,11 +98,12 @@ void CodeGenCache::gather(int name, int index_x, int index_y, int local_dim, int
         all_data = it->second.second;
 
         // copy data to all_data
-        for (int j = start_y; j < stop_y; j++)
-            for (int i = start_x; i < stop_x; i++)
+        for (int j = 0; j < local_dim; j++)
+            for (int i = 0; i < local_dim; i++)
             {
-                int index = j * total_dim + i;
-                all_data[index] = data[index];
+                int local_index = j * local_dim + i;
+                int global_index = (j + start_y) * total_dim + (i + start_x);
+                all_data[global_index] = data[local_index];
             }
 
         it->second.first++;
@@ -173,18 +177,20 @@ void Stencil::gather(int name)
 {
     Array* array = arrays[name];
     float* data = array->to_host();
+    float* local_data = array->get_local(data);
     // for (int i = 0; i < array->total_size; i++) {
     //     printf("%f ", data[i]);
     // }
     // printf("\n");
-    codegen_proxy[0].gather(name, index[0], index[1], array->shape[0], num_chares[0], array->total_size, data);
-    //delete[] data;
+    codegen_proxy[0].gather(name, index[0], index[1], array->local_shape[0], num_chares[0], array->total_local_size, local_data);
+    delete[] data;
+    delete[] local_data;
 }
 
 void Stencil::receive_dag(int size, char* graph)
 {
     std::unordered_map<int, DAGNode*> node_cache;
-    std::vector<DAGNode*> goals = build_dag(graph, node_cache);
+    std::vector<DAGNode*> goals = build_dag(graph, node_cache, ghost_info);
     std::vector<CkFutureID> futures;
     for (auto& goal : goals)
     {
@@ -265,26 +271,36 @@ void Stencil::execute_kernel(int kernel_id, std::vector<int> inputs)
     }
 
     std::vector<Slice*> bounds;
+    bool is_required = false;
     for (int i = 0; i < kernel->num_outputs; i++)
     {
         int output = kernel->outputs[i];
         Array* array = arrays[output];
         Slice* bound = new Slice();
-        *bound = kernel->get_launch_bounds(output, array);
+        // FIXME assumption - each array is only written to once
+        // in a kernel
+        *bound = kernel->get_launch_bounds(output, array, index);
+        if (bound->index[0].start != bound->index[0].stop && bound->index[1].start != bound->index[1].stop)
+            is_required = true;
         bounds.push_back(bound);
         args.push_back(&(bound->index[0].start));
         args.push_back(&(bound->index[0].stop));
         args.push_back(&(bound->index[1].start));
         args.push_back(&(bound->index[1].stop));
-        DEBUG_PRINT("Bounds: (%i : %i), (%i : %i)\n", bound->index[0].start, bound->index[0].stop,
+        DEBUG_PRINT("Chare (%i, %i)> Bounds: (%i : %i), (%i : %i)\n",
+            index[0], index[1],
+            bound->index[0].start, bound->index[0].stop,
             bound->index[1].start, bound->index[1].stop);
     }
 
-    compute_fun_t fn = codegen_proxy.ckLocalBranch()->lookup(kernel->hash);
-    int threads_per_block[2];
-    int grid_dims[2];
-    kernel->get_launch_params(array_args, threads_per_block, grid_dims);
-    launch_kernel(args, fn, compute_stream, threads_per_block, grid_dims);
+    if (is_required)
+    {
+        compute_fun_t fn = codegen_proxy.ckLocalBranch()->lookup(kernel->hash);
+        int threads_per_block[2];
+        int grid_dims[2];
+        kernel->get_launch_params(bounds, threads_per_block, grid_dims);
+        launch_kernel(args, fn, compute_stream, threads_per_block, grid_dims);
+    }
 
     for (auto& bound : bounds)
         delete bound;
@@ -305,11 +321,12 @@ void Stencil::create_array(int name, std::vector<int> shape)
     CkPrintf("Create field %i with depth\n", name);
 #endif
     std::vector<int> local_shape;
+    int ghost_depth = ghost_info[name];
     for (int i = 0; i < 2; i++)
     {
         int local_dim = shape[i] / num_chares[i];
         local_shape.push_back(local_dim);
     }
-    arrays[name] = new Array(name, local_shape);
+    arrays[name] = new Array(name, local_shape, shape, ghost_depth);
     invoke_init_array(arrays[name]->data, arrays[name]->total_size, compute_stream);
 }

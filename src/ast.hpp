@@ -113,9 +113,9 @@ public:
 
     void register_output_slice(int name, Slice& slice);
 
-    Slice get_launch_bounds(int name, Array* array);
+    Slice get_launch_bounds(int name, Array* array, int* chare_index);
 
-    void get_launch_params(std::vector<Array*> &args, int* threads_per_block,
+    void get_launch_params(std::vector<Slice*> &bounds, int* threads_per_block,
          int* grid_dims);
 
     std::string generate_variable_declarations(Context* ctx);

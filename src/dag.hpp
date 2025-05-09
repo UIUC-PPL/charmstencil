@@ -31,6 +31,7 @@ class ArrayDAGNode : public DAGNode
 {
 public:
     int name;
+    int ghost_depth;
     std::vector<int> shape;
 
     ArrayDAGNode() : DAGNode()
@@ -50,6 +51,7 @@ public:
     {}
 };
 
-std::vector<DAGNode*> build_dag(char* &cmd, std::unordered_map<int, DAGNode*>& node_cache);
+std::vector<DAGNode*> build_dag(char* &cmd, std::unordered_map<int, DAGNode*>& node_cache, 
+    std::unordered_map<int, int> &ghost_info);
 
 #endif // DAG_HPP

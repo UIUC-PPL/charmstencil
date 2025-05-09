@@ -95,6 +95,8 @@ class Stencil : public CBase_Stencil
 {
 private:
     char* DAG_DONE;
+
+    std::unordered_map<int, int> ghost_info;
 public:    
     // expects that the number of dimensions and length in each 
     // dimension will be specified at the time of creation
