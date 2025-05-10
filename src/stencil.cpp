@@ -190,6 +190,7 @@ void Stencil::gather(int name)
 void Stencil::receive_dag(int size, char* graph)
 {
     std::vector<DAGNode*> goals = build_dag(graph, node_cache, ghost_info);
+    DEBUG_PRINT("PE %i> Num goals = %i\n", CkMyPe(), goals.size());
     for (auto& goal : goals)
     {
         bool is_done = traverse_dag(goal);
@@ -198,8 +199,11 @@ void Stencil::receive_dag(int size, char* graph)
     }
     // wait for all futures
 
+    cudaStreamSynchronize(compute_stream);
+
     if (goals_waiting.empty())
     {
+        DEBUG_PRINT("PE %i> No goals waiting\n", CkMyPe());
         int done = 1;
         CkCallback cb(CkReductionTarget(CodeGenCache, operation_done), codegen_proxy[0]);
         contribute(sizeof(int), (void*) &done, CkReduction::sum_int, cb);
@@ -208,20 +212,27 @@ void Stencil::receive_dag(int size, char* graph)
 
 void Stencil::mark_done(DAGNode* node)
 {
+    DEBUG_PRINT("PE %i> Marking node %i as done\n", CkMyPe(), node->node_id);
     node->done = true;
     while(!node->waiting.empty())
     {
+        DEBUG_PRINT("PE %i> Traversing waiting node %i\n", CkMyPe(), node->waiting.back()->node_id);
         DAGNode* waiting = node->waiting.back();
         node->waiting.pop_back();
+        waiting->status = NodeStatus::UnVisited;
         traverse_dag(waiting);
     }
+
+    cudaStreamSynchronize(compute_stream);
 
     if (goals_waiting.find(node->node_id) != goals_waiting.end())
     {
         goals_waiting.erase(node->node_id);
         // send a message to the codegen cache
+        DEBUG_PRINT("goals waiting size = %i\n", goals_waiting.size());
         if (goals_waiting.empty())
         {
+            DEBUG_PRINT("PE %i> No goals waiting\n", CkMyPe());
             int done = 1;
             CkCallback cb(CkReductionTarget(CodeGenCache, operation_done), codegen_proxy[0]);
             contribute(sizeof(int), (void*) &done, CkReduction::sum_int, cb);
@@ -244,9 +255,12 @@ bool Stencil::traverse_dag(DAGNode* node)
     }
 
     auto* kernel_node = dynamic_cast<KernelDAGNode*>(node);
+    kernel_node->status = NodeStatus::Visited;
 
-    DEBUG_PRINT("Traversing kernel node %i\n", kernel_node->kernel_id);
+    //DEBUG_PRINT("Traversing kernel node %i\n", kernel_node->kernel_id);
 
+    bool dep_done = true;
+    DEBUG_PRINT("PE %i> Kernel node %i; dependencies = %i\n", CkMyPe(), kernel_node->node_id, kernel_node->dependencies.size());
     for (auto& dep : kernel_node->dependencies)
     {
         // traverse the dependencies
@@ -254,19 +268,25 @@ bool Stencil::traverse_dag(DAGNode* node)
         {
             // if the dependency is not done, return false
             dep->waiting.push_back(node);
-            return false;
+            DEBUG_PRINT("PE %i> Adding node %i to waiting list of %i\n", CkMyPe(), node->node_id, dep->node_id);
+            dep_done = false;
         }
+    }
+
+    if (!dep_done)
+    {
+        // dependency is not done
+        return false;
     }
 
     // execute this node and return a future
     execute(kernel_node);
-    kernel_node->status = NodeStatus::Visited;
     return kernel_node->done;
 }
 
 void Stencil::execute(KernelDAGNode* node)
 {
-    DEBUG_PRINT("Execute kernel %i\n", node->kernel_id);
+    //DEBUG_PRINT("Execute kernel %i\n", node->kernel_id);
     // execute the kernel
     // TODO
     // first data transfers
@@ -278,20 +298,34 @@ void Stencil::execute(KernelDAGNode* node)
 void Stencil::send_ghost_data(KernelDAGNode* node)
 {
     // data transfer required for this node
+    for (int i = 0; i < node->inputs.size(); i++)
+    {
+        int input = node->inputs[i];
+        Array* array = arrays[input];
+        if (array->generation > array->ghost_generation)
+        {
+            // ghost data is stale
+            // send the ghost data to the neighbors
+        }
+    }
+}
+
+void Stencil::kernel_done(KernelCallbackMsg* msg)
+{
+    DEBUG_PRINT("PE %i> Kernel done %i\n", CkMyPe(), msg->node_id);
+    mark_done(node_cache[msg->node_id]);
 }
 
 void Stencil::execute_kernel(KernelDAGNode* node)
 {
     Kernel* kernel = codegen_proxy.ckLocalBranch()->kernels[node->kernel_id];
     std::vector<void*> args;
-    std::vector<Array*> array_args;
     for (int i = 0; i < kernel->num_args; i++)
     {
         int input = node->inputs[i];
         Array* array = arrays[input];
         args.push_back(&(array->data));
         args.push_back(&(array->strides[0]));
-        array_args.push_back(array);
     }
 
     std::vector<Slice*> bounds;
@@ -311,10 +345,11 @@ void Stencil::execute_kernel(KernelDAGNode* node)
         args.push_back(&(bound->index[0].stop));
         args.push_back(&(bound->index[1].start));
         args.push_back(&(bound->index[1].stop));
-        DEBUG_PRINT("Chare (%i, %i)> Bounds: (%i : %i), (%i : %i)\n",
-            index[0], index[1],
-            bound->index[0].start, bound->index[0].stop,
-            bound->index[1].start, bound->index[1].stop);
+        //DEBUG_PRINT("Chare (%i, %i)> Bounds: (%i : %i), (%i : %i)\n",
+        //    index[0], index[1],
+        //    bound->index[0].start, bound->index[0].stop,
+        //    bound->index[1].start, bound->index[1].stop);
+        array->generation++;
     }
 
     if (is_required)
@@ -323,11 +358,16 @@ void Stencil::execute_kernel(KernelDAGNode* node)
         int threads_per_block[2];
         int grid_dims[2];
         kernel->get_launch_params(bounds, threads_per_block, grid_dims);
+        DEBUG_PRINT("PE %i> Launch kernel (%i, %i); grid (%i, %i); num_args = %i\n", 
+            CkMyPe(), threads_per_block[0], threads_per_block[1], grid_dims[0], grid_dims[1], args.size());
         launch_kernel(args, fn, compute_stream, threads_per_block, grid_dims);
-        hapiAddCallback(compute_stream, CkCallbackResumeThread());
+        CkCallback* cb = new CkCallback(CkIndex_Stencil::kernel_done(NULL), thisProxy[thisIndex]);
+        KernelCallbackMsg* msg = new KernelCallbackMsg(node->node_id);
+        hapiAddCallback(compute_stream, cb, msg);
+        //delete cb;
     }
-
-    mark_done(node);
+    else
+        mark_done(node);
 
     for (auto& bound : bounds)
         delete bound;
@@ -344,9 +384,7 @@ void Stencil::execute_kernel(KernelDAGNode* node)
 
 void Stencil::create_array(int name, std::vector<int> shape)
 {
-#ifndef NDEBUG
-    CkPrintf("Create field %i with depth\n", name);
-#endif
+    DEBUG_PRINT("PE %i> Create field %i with depth\n", CkMyPe(), name);
     std::vector<int> local_shape;
     int ghost_depth = ghost_info[name];
     for (int i = 0; i < 2; i++)

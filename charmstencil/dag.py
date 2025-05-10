@@ -118,7 +118,7 @@ class DAG(object):
         # all nodes are the nodes in the DAG
         self.all_nodes = set()
 
-        self.edges = []
+        self.edges = set()
 
     def serialize(self):
         # first add node information
@@ -175,7 +175,7 @@ class DAG(object):
         if from_node in self.goal_nodes:
             self.goal_nodes.remove(from_node)
         self.goal_nodes.add(to_node)
-        self.edges.append((from_node, to_node))
+        self.edges.add((from_node, to_node))
         from_node.add_edge(to_node)
 
     def plot(self):

@@ -140,8 +140,8 @@ Slice Kernel::get_launch_bounds(int name, Array* array, int* chare_index)
 {
     Slice slice = output_slices[name];
     Slice global_bounds;
-    DEBUG_PRINT("Calculating global_bounds on: (%i : %i), (%i : %i)\n", slice.index[0].start, slice.index[0].stop,
-        slice.index[1].start, slice.index[1].stop);
+    //DEBUG_PRINT("Calculating global_bounds on: (%i : %i), (%i : %i)\n", slice.index[0].start, slice.index[0].stop,
+    //    slice.index[1].start, slice.index[1].stop);
     global_bounds.index[0].start = GET_START(slice, array->global_shape, 0);
     global_bounds.index[0].stop = GET_STOP(slice, array->global_shape, 0);
     //int stepx = slice.index[0].step;

@@ -54,6 +54,19 @@ extern CcsDelayedReply operation_reply;
 extern CcsDelayedReply fetch_reply;
 
 
+class KernelCallbackMsg : public CMessage_KernelCallbackMsg
+{
+public:
+    int node_id;
+
+    KernelCallbackMsg(int node_id_)
+        : CMessage_KernelCallbackMsg()
+        , node_id(node_id_)
+    {
+    }
+};
+
+
 class CodeGenCache : public CBase_CodeGenCache
 {
 private:
@@ -120,6 +133,8 @@ public:
     ~Stencil();
 
     void mark_done(DAGNode* node);
+
+    void kernel_done(KernelCallbackMsg* msg);
 
     void gather(int name);
 

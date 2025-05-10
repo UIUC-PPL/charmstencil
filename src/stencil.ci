@@ -2,13 +2,17 @@ module stencil
 {
     readonly CProxy_CodeGenCache codegen_proxy;
 
+    message KernelCallbackMsg;
+
     array [2D] Stencil
     {
         entry Stencil(int, int);
 
         entry void gather(int name);
             
-        entry [threaded] void receive_dag(int size, char cmd[size]);
+        entry void receive_dag(int size, char cmd[size]);
+
+        entry void kernel_done(KernelCallbackMsg* msg);
     };
 
     nodegroup CodeGenCache

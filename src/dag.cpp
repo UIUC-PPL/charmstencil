@@ -32,7 +32,7 @@ std::vector<DAGNode*> build_dag(char* &cmd, std::unordered_map<int, DAGNode*>& n
             for (int j = 0; j < ndims; j++)
                 node->shape.push_back(extract<int>(cmd));
             node_cache[node->node_id] = node;
-            DEBUG_PRINT("Array node: %i\n", node->name);
+            DEBUG_PRINT("Array node: %i, %i\n", node->name, node->node_id);
         }
         else if (node_type == static_cast<int>(DAGNodeType::Kernel))
         {
@@ -46,7 +46,7 @@ std::vector<DAGNode*> build_dag(char* &cmd, std::unordered_map<int, DAGNode*>& n
                 ghost_info[node->inputs[j]] = 1; // FIXME this is hardcoded to 1 for now
             }
             node_cache[node->node_id] = node;
-            DEBUG_PRINT("Kernel node: %i\n", node->kernel_id);
+            DEBUG_PRINT("Kernel node: %i, %i\n", node->kernel_id, node->node_id);
         }
     }
 

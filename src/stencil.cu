@@ -26,7 +26,7 @@
 
 #define BSZ1D 128
 #define BSZ2D 16
-#define IDX(i, j, k, stepx, stepy) ((i) + (stepx) * (j) + (stepx) * (stepy) * (k))
+#define IDX2D(y, x, stride) ((y) * (stride) + (x))
 
 __global__
 void init_array(float* f, int total_size)
@@ -37,164 +37,72 @@ void init_array(float* f, int total_size)
         f[d0] = 0;
 }
 
-// this is to send to the right/left
+// __global__
+// void fb_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, 
+//     int startx, int starty, int startz, int stepx, int stepy, int local_size)
+// {
+//     int i = blockDim.x * blockIdx.x + threadIdx.x;
+//     int k = blockDim.y * blockIdx.y + threadIdx.y;
+
+//     if (i < local_size && k < local_size)
+//         for (int j = 0; j < ghost_depth; j++)
+//             f[IDX(startx + i, starty + j, startz + k, stepx, stepy)] = ghost_data[IDX(i, j, k, ghost_depth, local_size)];
+// }
+
 __global__
-void rl_packing_kernel(double* f, double* ghost_data, int ghost_depth, 
-    int startx, int starty, int startz, int stepx, int stepy, int local_size)
+void ns_packing_kernel(const float* array, float* ghost_data, int ghost_depth, 
+    int startx, int starty, int stride, int local_size)
 {
-    int j = blockDim.x * blockIdx.x + threadIdx.x;
-    int k = blockDim.y * blockIdx.y + threadIdx.y;
+    int x = blockDim.x * blockIdx.x + threadIdx.x;
 
-    if (j < local_size && k < local_size)
-        for (int i = 0; i < ghost_depth; i++)
-            ghost_data[IDX(i, j, k, ghost_depth, local_size)] = f[IDX(startx + i, starty + j, startz + k, stepx, stepy)];
-}
+    if (x >= local_size)
+        return;
 
-// FIXME memory coalescing here can improve performance
-// change the order of accesses to ghost_data
-__global__
-void ud_packing_kernel(double* f, double* ghost_data, int ghost_depth, 
-    int startx, int starty, int startz, int stepx, int stepy, int local_size)
-{
-    int i = blockDim.x * blockIdx.x + threadIdx.x;
-    int j = blockDim.y * blockIdx.y + threadIdx.y;
-
-    if (i < local_size && j < local_size)
-        for (int k = 0; k < ghost_depth; k++)
-            ghost_data[IDX(i, j, k, ghost_depth, local_size)] = f[IDX(startx + i, starty + j, startz + k, stepx, stepy)];
+    for (int y = 0; y < ghost_depth; y++)
+        ghost_data[IDX2D(y, x, local_size)] = array[IDX2D(y + starty, x + startx, stride)];
 }
 
 __global__
-void fb_packing_kernel(double* f, double* ghost_data, int ghost_depth, 
-    int startx, int starty, int startz, int stepx, int stepy, int local_size)
+void ew_packing_kernel(const float* array, float* ghost_data, int ghost_depth, 
+    int startx, int starty, int stride, int local_size)
 {
-    int i = blockDim.x * blockIdx.x + threadIdx.x;
-    int k = blockDim.y * blockIdx.y + threadIdx.y;
+    int y = blockDim.x * blockIdx.x + threadIdx.x;
 
-    if (i < local_size && k < local_size)
-        for (int j = 0; j < ghost_depth; j++)
-            ghost_data[IDX(i, j, k, ghost_depth, local_size)] = f[IDX(startx + i, starty + j, startz + k, stepx, stepy)];
+    if (y >= local_size)
+        return;
+
+    for (int x = 0; x < ghost_depth; x++)
+        ghost_data[IDX2D(x, y, local_size)] = array[IDX2D(y + starty, x + startx, stride)];
 }
 
-// this is to send to the right/left
-__global__
-void rl_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, 
-    int startx, int starty, int startz, int stepx, int stepy, int local_size)
+void invoke_ns_packing_kernel(float* array, float* ghost_data, int ghost_depth, 
+    int startx, int stopx, int starty, int stopy,
+    int stride, int local_size, cudaStream_t stream)
 {
-    int j = blockDim.x * blockIdx.x + threadIdx.x;
-    int k = blockDim.y * blockIdx.y + threadIdx.y;
+    dim3 block(BSZ1D, 1, 1);
+    dim3 grid(ceil((float) (stopx - startx) / BSZ1D), 1, 1);
 
-    if (j < local_size && k < local_size)
-        for (int i = 0; i < ghost_depth; i++)
-            f[IDX(startx + i, starty + j, startz + k, stepx, stepy)] = ghost_data[IDX(i, j, k, ghost_depth, local_size)];
+    ns_packing_kernel<<<grid, block, 0, stream>>>(array, ghost_data, ghost_depth, startx, starty, 
+        stride, local_size);
 }
 
-// FIXME memory coalescing here can improve performance
-// change the order of accesses to ghost_data
-__global__
-void ud_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, 
-    int startx, int starty, int startz, int stepx, int stepy, int local_size)
+void invoke_ew_packing_kernel(float* array, float* ghost_data, int ghost_depth, 
+    int startx, int stopx, int starty, int stopy,
+    int stride, int local_size, cudaStream_t stream)
 {
-    int i = blockDim.x * blockIdx.x + threadIdx.x;
-    int j = blockDim.y * blockIdx.y + threadIdx.y;
+    dim3 block(BSZ1D, 1, 1);
+    dim3 grid(ceil((float) (stopy - starty) / BSZ1D), 1, 1);
 
-    if (i < local_size && j < local_size)
-        for (int k = 0; k < ghost_depth; k++)
-            f[IDX(startx + i, starty + j, startz + k, stepx, stepy)] = ghost_data[IDX(i, j, k, ghost_depth, local_size)];
-}
-
-__global__
-void fb_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, 
-    int startx, int starty, int startz, int stepx, int stepy, int local_size)
-{
-    int i = blockDim.x * blockIdx.x + threadIdx.x;
-    int k = blockDim.y * blockIdx.y + threadIdx.y;
-
-    if (i < local_size && k < local_size)
-        for (int j = 0; j < ghost_depth; j++)
-            f[IDX(startx + i, starty + j, startz + k, stepx, stepy)] = ghost_data[IDX(i, j, k, ghost_depth, local_size)];
-}
-
-
-void invoke_rl_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream)
-{
-    dim3 block(BSZ2D, BSZ2D);
-    dim3 grid(ceil((float) local_size[1] / BSZ2D), ceil((float) local_size[2] / BSZ2D));
-    rl_packing_kernel<<<grid, block, 0, stream>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
-        stepx, stepy, local_size[0]);
-    hapiCheck(cudaPeekAtLastError());
-}
-
-void invoke_ud_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream)
-{
-    dim3 block(BSZ2D, BSZ2D);
-    dim3 grid(ceil((float) local_size[0] / BSZ2D), ceil((float) local_size[1] / BSZ2D));
-    ud_packing_kernel<<<grid, block, 0, stream>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
-        stepx, stepy, local_size[0]);
-    hapiCheck(cudaPeekAtLastError());
-}
-
-void invoke_fb_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream)
-{
-    dim3 block(BSZ2D, BSZ2D);
-    dim3 grid(ceil((float) local_size[0] / BSZ2D), ceil((float) local_size[2] / BSZ2D));
-    fb_packing_kernel<<<grid, block, 0, stream>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
-        stepx, stepy, local_size[0]);
-    hapiCheck(cudaPeekAtLastError());
-}
-
-void invoke_rl_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream)
-{
-    dim3 block(BSZ2D, BSZ2D);
-    dim3 grid(ceil((float) local_size[1] / BSZ2D), ceil((float) local_size[2] / BSZ2D));
-    rl_unpacking_kernel<<<grid, block, 0, stream>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
-        stepx, stepy, local_size[0]);
-    hapiCheck(cudaPeekAtLastError());
-}
-
-void invoke_ud_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream)
-{
-    dim3 block(BSZ2D, BSZ2D);
-    dim3 grid(ceil((float) local_size[0] / BSZ2D), ceil((float) local_size[1] / BSZ2D));
-    ud_unpacking_kernel<<<grid, block, 0, stream>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
-        stepx, stepy, local_size[0]);
-    hapiCheck(cudaPeekAtLastError());
-}
-
-void invoke_fb_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream)
-{
-    dim3 block(BSZ2D, BSZ2D);
-    dim3 grid(ceil((float) local_size[0] / BSZ2D), ceil((float) local_size[2] / BSZ2D));
-    fb_unpacking_kernel<<<grid, block, 0, stream>>>(f, ghost_data, ghost_depth, startx, starty, startz, 
-        stepx, stepy, local_size[0]);
-    hapiCheck(cudaPeekAtLastError());
+    ew_packing_kernel<<<grid, block, 0, stream>>>(array, ghost_data, ghost_depth, startx, starty, 
+        stride, local_size);
 }
 
 void invoke_init_array(float* array, int total_size, cudaStream_t stream)
 {
     // TODO better to launch one kernel for all fields?
-    printf("total size = %u\n", total_size);
     int num_blocks = ceil((float) total_size / BSZ1D);
     init_array<<<num_blocks, BSZ1D, 0, stream>>>(array, total_size);
     hapiCheck(cudaPeekAtLastError());
-}
-
-void* get_module(std::string &fatbin_file)
-{
-    std::ifstream file(fatbin_file.c_str(), std::ios::binary | std::ios::ate);
-    if (file.fail())
-        CkAbort("File could not be opened\n");
-    std::streamsize size = file.tellg();
-    file.seekg(0, std::ios::beg);
-    void* buffer = malloc(size);
-    file.read((char*) buffer, size);
-    return buffer;
 }
 
 CUfunction load_kernel(size_t &hash, int suffix)
@@ -215,13 +123,11 @@ void launch_kernel(std::vector<void*> args, CUfunction& compute_kernel, cudaStre
     int* threads_per_block, int* grid)
 {
     // figure out how to load compute kernel
-    //printf("Launch kernel %i, %i, %i\n", block_sizes[0], block_sizes[1], block_sizes[2]);
-    printf("Launch kernel (%i, %i); grid (%i, %i); num_args = %i\n", 
-        threads_per_block[0], threads_per_block[1], grid[0], grid[1], args.size());
+    //printf("Launch kernel %i, %i, %i\n", block_sizes[0], block_sizes[1], block_sizes[2]);;
     CHECK(cuLaunchKernel(compute_kernel, 
         threads_per_block[0], threads_per_block[1], 1,
         grid[0], grid[1], 1,
         0, stream, args.data(), NULL));
-    cuStreamSynchronize(stream);
-    hapiCheck(cudaPeekAtLastError());
+    //cuStreamSynchronize(stream);
+    //hapiCheck(cudaPeekAtLastError());
 }

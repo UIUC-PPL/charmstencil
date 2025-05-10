@@ -11,6 +11,8 @@ public:
     int total_size;
     int total_local_size;
     int ghost_depth;
+    int generation;
+    int ghost_generation;
     float* data;
     std::vector<int> shape;
     std::vector<int> local_shape;
@@ -22,6 +24,8 @@ public:
         , local_shape(shape_)
         , global_shape(global_shape_)
         , ghost_depth(ghost_depth_)
+        , generation(0)
+        , ghost_generation(-1)
     {
         for(int i = 0; i < shape_.size(); i++)
             shape.push_back(shape_[i] + 2 * ghost_depth_);
