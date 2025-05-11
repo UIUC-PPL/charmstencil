@@ -562,8 +562,8 @@ void Stencil::execute_kernel(KernelDAGNode* node)
 {
     //if (thisIndex.x == 0 && thisIndex.y == 0)
     DEBUG_PRINT("(%i, %i)> Executing kernel %i\n", thisIndex.x, thisIndex.y, node->node_id);
-    //hapiCheck(cudaEventRecord(comm_event, comm_stream));
-    //hapiCheck(cudaStreamWaitEvent(compute_stream, comm_event, 0));
+    hapiCheck(cudaEventRecord(comm_event, comm_stream));
+    hapiCheck(cudaStreamWaitEvent(compute_stream, comm_event, 0));
 
     Kernel* kernel = codegen_proxy.ckLocalBranch()->kernels[node->kernel_id];
     std::vector<void*> args;
