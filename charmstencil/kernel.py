@@ -27,8 +27,8 @@ def capture_kernel_graph(f, args):
     """Capture the kernel graph from the function."""
     global active_graph
     active_graph = KernelGraph(f.__name__)
-    param_args = [KernelParameter(idx) for idx, arg in enumerate(args)]
-    f(*param_args)
+    active_graph.args = [KernelParameter(idx) for idx, arg in enumerate(args)]
+    f(*active_graph.args)
     kernel_graphs[f.__name__] = active_graph
     active_graph = None
 
@@ -43,13 +43,13 @@ def kernel(f):
         if f.__name__ not in kernel_graphs:
             capture_kernel_graph(f, args)
         active_graph = kernel_graphs[f.__name__]
-        inputs, outputs = active_graph.get_input_output(args)
+        outputs = active_graph.get_outputs(args)
         # now find the inputs and outputs and add call to the DAG
         dag = get_active_dag()
-        kernel_node = KernelDAGNode(f.__name__, active_graph.kernel_id, inputs)
-        #dag.add_node(kernel_node)
+        kernel_node = KernelDAGNode(f.__name__, active_graph.kernel_id, args)
+        dag.add_node(kernel_node)
         # inputs are the Array objects
-        for inp in inputs:
+        for inp in args:
             dag.add_edge(inp.dag_node, kernel_node)
 
         for out in outputs:
