@@ -1,5 +1,6 @@
 #ifndef DAG_HPP
 #define DAG_HPP
+#include <unordered_set>
 #include "codegen.hpp"
 
 enum class DAGNodeType : int
@@ -21,7 +22,7 @@ public:
     bool is_leaf;
     NodeStatus status;
     bool done;
-    std::vector<DAGNode*> waiting;
+    std::unordered_set<DAGNode*> waiting;
 
     virtual ~DAGNode() = default;
 

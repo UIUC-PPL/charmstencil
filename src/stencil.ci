@@ -13,6 +13,10 @@ module stencil
         entry void receive_dag(int size, char cmd[size]);
 
         entry void kernel_done(KernelCallbackMsg* msg);
+
+        entry void ghost_done(KernelCallbackMsg* msg);
+
+        entry void receive_ghost_data(int node_id, int name, int dir, int size, nocopydevice float buf[size]);
     };
 
     nodegroup CodeGenCache

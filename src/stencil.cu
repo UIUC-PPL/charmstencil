@@ -24,6 +24,18 @@
     }                                                        \
   }
 
+#define CHECK_RT(expression)                                    \
+  {                                                          \
+    cudaError_t status = (expression);                          \
+    if (status != CUDA_SUCCESS) {                            \
+      const char* err_str;                                   \
+      cudaGetErrorString(status, &err_str);                    \
+      std::cerr << "CUDA Error on line " << __LINE__ << ": " \
+                << err_str << std::endl;                     \
+      std::exit(EXIT_FAILURE);                               \
+    }                                                        \
+  }
+
 #define BSZ1D 128
 #define BSZ2D 16
 #define IDX2D(y, x, stride) ((y) * (stride) + (x))
@@ -75,29 +87,89 @@ void ew_packing_kernel(const float* array, float* ghost_data, int ghost_depth,
         ghost_data[IDX2D(x, y, local_size)] = array[IDX2D(y + starty, x + startx, stride)];
 }
 
+__global__
+void ns_unpacking_kernel(float* array, const float* ghost_data, int ghost_depth, 
+    int startx, int starty, int stride, int local_size)
+{
+    int x = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (x >= local_size)
+        return;
+
+    for (int y = 0; y < ghost_depth; y++)
+        array[IDX2D(y + starty, x + startx, stride)] = ghost_data[IDX2D(y, x, local_size)];
+}
+
+__global__
+void ew_unpacking_kernel(float* array, const float* ghost_data, int ghost_depth, 
+    int startx, int starty, int stride, int local_size)
+{
+    int y = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (y >= local_size)
+        return;
+
+    for (int x = 0; x < ghost_depth; x++)
+        array[IDX2D(y + starty, x + startx, stride)] = ghost_data[IDX2D(x, y, local_size)];
+}
+
 void invoke_ns_packing_kernel(float* array, float* ghost_data, int ghost_depth, 
     int startx, int stopx, int starty, int stopy,
-    int stride, int local_size, cudaStream_t stream)
+    int stride, int local_size, cudaStream_t& stream)
 {
     dim3 block(BSZ1D, 1, 1);
     dim3 grid(ceil((float) (stopx - startx) / BSZ1D), 1, 1);
 
     ns_packing_kernel<<<grid, block, 0, stream>>>(array, ghost_data, ghost_depth, startx, starty, 
         stride, local_size);
+    hapiCheck(cudaPeekAtLastError());
+    //cudaStreamSynchronize(stream);
 }
 
 void invoke_ew_packing_kernel(float* array, float* ghost_data, int ghost_depth, 
     int startx, int stopx, int starty, int stopy,
-    int stride, int local_size, cudaStream_t stream)
+    int stride, int local_size, cudaStream_t& stream)
 {
     dim3 block(BSZ1D, 1, 1);
     dim3 grid(ceil((float) (stopy - starty) / BSZ1D), 1, 1);
 
     ew_packing_kernel<<<grid, block, 0, stream>>>(array, ghost_data, ghost_depth, startx, starty, 
         stride, local_size);
+    hapiCheck(cudaPeekAtLastError());
+    //cudaStreamSynchronize(stream);
 }
 
-void invoke_init_array(float* array, int total_size, cudaStream_t stream)
+void invoke_ns_unpacking_kernel(float* array, float* ghost_data, int ghost_depth, 
+    int startx, int stopx, int starty, int stopy,
+    int stride, int local_size, cudaStream_t& stream)
+{
+    dim3 block(BSZ1D, 1, 1);
+    dim3 grid(ceil((float) (stopx - startx) / BSZ1D), 1, 1);
+
+    //DEBUG_PRINT("Unpacking NS kernel: %d %d %d %d %d %d\n", startx, stopx, starty, stopy, stride, local_size);
+
+    ns_unpacking_kernel<<<grid, block, 0, stream>>>(array, ghost_data, ghost_depth, startx, starty, 
+        stride, local_size);
+    hapiCheck(cudaPeekAtLastError());
+    //cudaStreamSynchronize(stream);
+}
+
+void invoke_ew_unpacking_kernel(float* array, float* ghost_data, int ghost_depth, 
+    int startx, int stopx, int starty, int stopy,
+    int stride, int local_size, cudaStream_t& stream)
+{
+    dim3 block(BSZ1D, 1, 1);
+    dim3 grid(ceil((float) (stopy - starty) / BSZ1D), 1, 1);
+
+    //DEBUG_PRINT("Unpacking EW kernel: %d %d %d %d %d %d\n", startx, stopx, starty, stopy, stride, local_size);
+
+    ew_unpacking_kernel<<<grid, block, 0, stream>>>(array, ghost_data, ghost_depth, startx, starty, 
+        stride, local_size);
+    hapiCheck(cudaPeekAtLastError());
+    //cudaStreamSynchronize(stream);
+}
+
+void invoke_init_array(float* array, int total_size, cudaStream_t& stream)
 {
     // TODO better to launch one kernel for all fields?
     int num_blocks = ceil((float) total_size / BSZ1D);
@@ -123,10 +195,10 @@ void launch_kernel(std::vector<void*> args, CUfunction& compute_kernel, cudaStre
     int* threads_per_block, int* grid)
 {
     // figure out how to load compute kernel
-    //printf("Launch kernel %i, %i, %i\n", block_sizes[0], block_sizes[1], block_sizes[2]);;
+    //printf("Launch kernel: %d %d %d %d\n", threads_per_block[0], threads_per_block[1], grid[0], grid[1]);
     CHECK(cuLaunchKernel(compute_kernel, 
-        threads_per_block[0], threads_per_block[1], 1,
         grid[0], grid[1], 1,
+        threads_per_block[0], threads_per_block[1], 1,
         0, stream, args.data(), NULL));
     //cuStreamSynchronize(stream);
     //hapiCheck(cudaPeekAtLastError());

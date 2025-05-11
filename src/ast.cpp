@@ -380,6 +380,6 @@ Kernel* build_kernel(char* &cmd)
 void choose_optimal_grid(int* threads_per_block, int nx, int ny)
 {
     // FIXME - use a better heuristic later
-    threads_per_block[0] = 16;
-    threads_per_block[1] = 16;
+    threads_per_block[0] = 32;
+    threads_per_block[1] = 32;
 }

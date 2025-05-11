@@ -22,28 +22,32 @@
   }
 
 
-#define LEFT 0
-#define RIGHT 1
-#define FRONT 2
-#define BACK 3
-#define DOWN 4
-#define UP 5
+#define WEST 0
+#define EAST 1
+#define SOUTH 2
+#define NORTH 3 
 
 
-extern void invoke_fb_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream);
-extern void invoke_ud_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream);
-extern void invoke_rl_unpacking_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream);
-extern void invoke_fb_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream);
-extern void invoke_ud_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream);
-extern void invoke_rl_packing_kernel(double* f, double* ghost_data, int ghost_depth, int startx, 
-    int starty, int startz, int stepx, int stepy, uint32_t* local_size, cudaStream_t stream);
-extern void invoke_init_array(float* array, int total_size, cudaStream_t stream);
+extern void invoke_ns_packing_kernel(float* array, float* ghost_data, int ghost_depth, 
+    int startx, int stopx, int starty, int stopy,
+    int stride, int local_size, cudaStream_t& stream);
+
+extern void invoke_ew_packing_kernel(float* array, float* ghost_data, int ghost_depth, 
+    int startx, int stopx, int starty, int stopy,
+    int stride, int local_size, cudaStream_t& stream);
+
+extern void invoke_ns_unpacking_kernel(float* array, float* ghost_data, int ghost_depth, 
+    int startx, int stopx, int starty, int stopy,
+    int stride, int local_size, cudaStream_t& stream);
+
+extern void invoke_ew_unpacking_kernel(float* array, float* ghost_data, int ghost_depth, 
+    int startx, int stopx, int starty, int stopy,
+    int stride, int local_size, cudaStream_t& stream);
+
+extern void invoke_init_array(float* array, int total_size, cudaStream_t& stream);
+
 extern CUfunction load_kernel(size_t &hash, int suffix);
+
 extern void launch_kernel(std::vector<void*> args, CUfunction& compute_kernel, cudaStream_t& stream,
     int* threads_per_block, int* grid);
 
@@ -108,13 +112,17 @@ public:
 class Stencil : public CBase_Stencil
 {
 private:
+    int num_nbrs;
+    bool boundary[4];
     char* DAG_DONE;
 
     std::unordered_map<int, int> ghost_info;
-
     std::unordered_map<int, DAGNode*> node_cache;
-
     std::unordered_set<int> goals_waiting;
+
+    std::unordered_map<int, int> ghost_counts;
+    std::unordered_map<int, int> ghosts_expected;
+    std::unordered_map<int, std::vector<int>> ghost_arrays;
 public:    
     // expects that the number of dimensions and length in each 
     // dimension will be specified at the time of creation
@@ -125,6 +133,9 @@ public:
 
     cudaStream_t compute_stream;
     cudaStream_t comm_stream;
+
+    cudaEvent_t compute_event;
+    cudaEvent_t comm_event;
 
     Stencil(int num_chares_x, int num_chares_y);
 
@@ -138,11 +149,19 @@ public:
 
     void gather(int name);
 
+    void receive_ghost_data(int node_id, int name, int dir, int& size, float* &buf, CkDeviceBufferPost* device_post);
+
+    void receive_ghost_data(int node_id, int name, int dir, int size, float* buf);
+
+    void check_ghost_completion(int node_id);
+
+    void ghost_done(KernelCallbackMsg* msg);
+
+    void handle_ghost_completion(int node_id);
+
     void receive_dag(int size, char* cmd);
 
     bool traverse_dag(DAGNode* node);
-
-    void execute(KernelDAGNode* node);
 
     void send_ghost_data(KernelDAGNode* node);
 
