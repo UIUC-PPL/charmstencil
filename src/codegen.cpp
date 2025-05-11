@@ -26,7 +26,7 @@ void generate_kernel(Kernel* knl, int suffix)
 
     // compile filename
     std::string compile_cmd = fmt::format(
-            "nvcc -std=c++11 -arch sm_60 --ptx -o {}.ptx {}.cu -I$STENCIL_PATH -I$CHARM_PATH -O3 -g -lcuda", 
+            "nvcc -std=c++11 -arch sm_60 --ptx -o {}.ptx {}.cu -O3 -g -lcuda", 
             filename, filename);
 
     system(compile_cmd.c_str());

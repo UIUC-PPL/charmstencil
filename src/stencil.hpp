@@ -74,7 +74,7 @@ public:
 class CodeGenCache : public CBase_CodeGenCache
 {
 private:
-    double start;
+    double start_time;
     CmiNodeLock lock;
     std::unordered_map<size_t, compute_fun_t> cache;
 
@@ -95,15 +95,11 @@ public:
 
     compute_fun_t lookup(size_t hash);
 
-    void start_time(double time);
-
-    void end_time(double time);
-
     void receive(int size, char* msg, CProxy_Stencil stencil_proxy);
 
     void send_dag(int done);
 
-    void operation_done(int done);
+    void operation_done(double start);
 
     void gather(int name, int index_x, int index_y, int local_dim, int num_chares, int data_size, float* data);
 };
@@ -112,6 +108,7 @@ public:
 class Stencil : public CBase_Stencil
 {
 private:
+    double start_time;
     int num_nbrs;
     bool boundary[4];
     char* DAG_DONE;

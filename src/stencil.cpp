@@ -18,18 +18,9 @@ compute_fun_t CodeGenCache::lookup(size_t hash)
     return cache[hash];
 }
 
-void CodeGenCache::start_time(double time)
-{
-    start = time;
-}
-
-void CodeGenCache::end_time(double time)
-{
-    CkPrintf("Total time = %f\n", time - start);
-}
-
 void CodeGenCache::receive(int size, char* cmd, CProxy_Stencil stencil_proxy_)
 {
+    start_time = CmiWallTimer();
     int num_kernels = extract<int>(cmd);
     CkPrintf("Received %i kernels\n", num_kernels);
     for (int i = 0; i < num_kernels; i++)
@@ -52,15 +43,16 @@ void CodeGenCache::receive(int size, char* cmd, CProxy_Stencil stencil_proxy_)
 
 void CodeGenCache::send_dag(int done)
 {
+    CkPrintf("Kernels compiled in %f seconds\n", CmiWallTimer() - start_time);
     stencil_proxy.receive_dag(saved_dag_size, saved_dag);
     delete[] saved_dag;
 }
 
-void CodeGenCache::operation_done(int done)
+void CodeGenCache::operation_done(double start)
 {
-    CkPrintf("Operation done\n");
-    int ret = 1;
-    CcsSendDelayedReply(operation_reply, sizeof(int), &ret);
+    double runtime = CmiWallTimer() - start;
+    CkPrintf("Execution took %f seconds\n", runtime);
+    CcsSendDelayedReply(operation_reply, sizeof(double), &runtime);
 }
 
 void CodeGenCache::gather(int name, int index_x, int index_y, int local_dim, int num_chares, int data_size, float* data)
@@ -210,8 +202,12 @@ void Stencil::gather(int name)
 
 void Stencil::receive_dag(int size, char* graph)
 {
+    start_time = CmiWallTimer();
     std::vector<DAGNode*> goals = build_dag(graph, node_cache, ghost_info);
     //DEBUG_PRINT("PE %i> Num goals = %i\n", CkMyPe(), goals.size());
+    if (thisIndex.x == 0 && thisIndex.y == 0)
+        CkPrintf("Building DAG took %f seconds\n", CmiWallTimer() - start_time);
+    start_time = CmiWallTimer();
     for (auto& goal : goals)
     {
         bool is_done = traverse_dag(goal);
@@ -231,9 +227,8 @@ void Stencil::receive_dag(int size, char* graph)
         DEBUG_PRINT("PE %i> No goals waiting\n", CkMyPe());
         cudaStreamSynchronize(compute_stream);
         cudaStreamSynchronize(comm_stream);
-        int done = 1;
         CkCallback cb(CkReductionTarget(CodeGenCache, operation_done), codegen_proxy[0]);
-        contribute(sizeof(int), (void*) &done, CkReduction::sum_int, cb);
+        contribute(sizeof(int), (void*) &start_time, CkReduction::min_double, cb);
     }
 }
 
