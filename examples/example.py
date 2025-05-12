@@ -1,6 +1,6 @@
 from charmstencil.kernel import kernel, plot_kernel_graphs
 from charmstencil.array import create_array
-from charmstencil.dag import show_dag
+from charmstencil.dag import show_dag, get_active_dag
 from charmstencil.interface import CCSInterface
 import numpy as np
 
@@ -33,6 +33,9 @@ def boundary4(u1, u2):
 def jacobi(u1, u2):
     u2[1:-1, 1:-1] = 0.25 * (u1[:-2, 1:-1] + u1[2:, 1:-1] + u1[1:-1, :-2] + u1[1:-1, 2:])
 
+
+interface = CCSInterface('192.168.1.114', 1234, odf=4)
+
 u1 = create_array((16384, 16384))
 u2 = create_array((16384, 16384))
 
@@ -41,11 +44,19 @@ boundary1(u1, u2)
 boundary2(u1, u2)
 boundary3(u1, u2)
 boundary4(u1, u2)
-for i in range(500):
+
+for i in range(3):
+    jacobi(u1, u2)
+
+interface.execute()
+#show_dag()
+#get_active_dag().clear()
+
+for i in range(100):
     jacobi(u1, u2)
     u1, u2 = u2, u1
 
-interface = CCSInterface('192.168.1.114', 1234, odf=4)
+#show_dag()
 interface.execute()
 
 # uhost = u1.get(interface)

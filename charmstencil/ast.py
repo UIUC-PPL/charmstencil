@@ -35,6 +35,15 @@ def slice_to_bytes(key):
     cmd += to_bytes(step, 'i')
     return cmd
 
+def slice_to_str(key):
+    start = '0' if key.start is None else key.start
+    stop = '' if key.stop is None else key.stop
+    step = '1' if key.step is None else key.step
+    return f'{start}:{stop}:{step}'
+
+def tuple_to_str(key):
+    return '(' + ','.join([slice_to_str(k) if isinstance(k, slice) else str(k) for k in key]) + ')'
+
 
 def int_to_slice(i):
     return slice(i, i + 1, 1)
@@ -147,16 +156,21 @@ class ParamOperationNode(object):
     def fill_plot(self, G, node_map={}, next_id=0, parent=None):
         if self.opcode == OPCODES['noop']:
             if isinstance(self.operands[0], KernelParameter):
-                node_map[next_id] = 'f' + str(self.operands[0].index)
+                node_map[next_id] = 'a' + str(self.operands[0].index)
                 G.add_node(next_id)
                 if parent is not None:
                     G.add_edge(parent, next_id)
                 return next_id + 1
             elif isinstance(self.operands[0], float) or isinstance(self.operands[0], int) or \
-                isinstance(self.operands[0], slice) or isinstance(self.operands[0], tuple):
+                isinstance(self.operands[0], slice):
                 G.add_node(next_id)
                 G.add_edge(parent, next_id)
                 node_map[next_id] = str(self.operands[0])
+                return next_id + 1
+            elif isinstance(self.operands[0], tuple):
+                G.add_node(next_id)
+                G.add_edge(parent, next_id)
+                node_map[next_id] = tuple_to_str(self.operands[0])
                 return next_id + 1
         else:
             opnode = next_id

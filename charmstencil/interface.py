@@ -67,23 +67,33 @@ class CCSInterface(Interface):
         self.server = Server(server_ip, server_port)
         self.server.connect()
         cmd = to_bytes(odf, 'i')
+        self.kernels_sent = {}
         self.send_command(Handlers.connection_handler, cmd)
         print("Connected to server")
 
     def __del__(self):
         self.disconnect()
 
+    def get_kernels_to_send(self):
+        from charmstencil.kernel import get_kernel_graphs
+        kernel_graphs = get_kernel_graphs()
+        kernels_to_send = {}
+        for kernel_graph in kernel_graphs.values():
+            if kernel_graph.kernel_id not in self.kernels_sent:
+                kernels_to_send[kernel_graph.kernel_id] = kernel_graph
+        return kernels_to_send
+
     def execute(self):
         """
         Send the DAG and kernel graphs to backend for execution.
         """
-        from charmstencil.kernel import get_kernel_graphs
         from charmstencil.dag import get_active_dag
-        kernel_graphs = get_kernel_graphs()
+        kernel_graphs = self.get_kernels_to_send()
         print(f"Sending {len(kernel_graphs)} kernel graphs to server")
         cmd = to_bytes(len(kernel_graphs), 'i')
         for kernel_graph in kernel_graphs.values():
             cmd += kernel_graph.serialize()
+            self.kernels_sent[kernel_graph.kernel_id] = kernel_graph
         dag = get_active_dag().serialize()
         dag_msg = to_bytes(len(dag), 'i')
         dag_msg += dag
@@ -91,6 +101,8 @@ class CCSInterface(Interface):
         msg += cmd
         msg += dag_msg
         self.send_command(Handlers.operation_handler, msg)
+        get_active_dag().clear()
+        #get_kernel_graphs().clear()
 
     def disconnect(self):
         self.send_command(Handlers.disconnection_handler, '')
