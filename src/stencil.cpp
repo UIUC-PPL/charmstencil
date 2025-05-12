@@ -228,7 +228,7 @@ void Stencil::receive_dag(int size, char* graph)
         cudaStreamSynchronize(compute_stream);
         cudaStreamSynchronize(comm_stream);
         CkCallback cb(CkReductionTarget(CodeGenCache, operation_done), codegen_proxy[0]);
-        contribute(sizeof(int), (void*) &start_time, CkReduction::min_double, cb);
+        contribute(sizeof(double), (void*) &start_time, CkReduction::min_double, cb);
     }
 }
 
@@ -265,7 +265,7 @@ void Stencil::mark_done(DAGNode* node)
             cudaStreamSynchronize(comm_stream);
             int done = 1;
             CkCallback cb(CkReductionTarget(CodeGenCache, operation_done), codegen_proxy[0]);
-            contribute(sizeof(int), (void*) &done, CkReduction::sum_int, cb);
+            contribute(sizeof(double), (void*) &start_time, CkReduction::min_double, cb);
         }
     }
 }
