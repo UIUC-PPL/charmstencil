@@ -74,6 +74,9 @@ class CCSInterface(Interface):
     def __del__(self):
         self.disconnect()
 
+    def exit(self):
+        self.disconnect()
+
     def get_kernels_to_send(self):
         from charmstencil.kernel import get_kernel_graphs
         kernel_graphs = get_kernel_graphs()
