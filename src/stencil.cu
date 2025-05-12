@@ -203,5 +203,5 @@ void launch_kernel(std::vector<void*> args, CUfunction& compute_kernel, cudaStre
         shmem_size, stream, args.data(), NULL));
     //cudaStreamSynchronize(stream);
     //cuStreamSynchronize(stream);
-    //hapiCheck(cudaPeekAtLastError());
+    hapiCheck(cudaPeekAtLastError());
 }

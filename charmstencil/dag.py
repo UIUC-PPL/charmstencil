@@ -43,6 +43,12 @@ class DAGNode(object):
         self.children.append(dependency)
         #print(f'Adding edge from {self.name} to {dependency.name}')
 
+    def clear(self):
+        """
+        Clears the node by resetting its children.
+        """
+        self.children = []
+
     def fill_plot(self, G, node_map={}, parent=None):
         """
         Fills the plot with the DAG node and its children.
@@ -112,12 +118,31 @@ class DAG(object):
         Initializes the DAG with tasks and their children.
         """
         # leaf nodes are the independent ArrayDAGNodes
-        self.leaf_nodes = []
+        self.leaf_nodes = set()
         # goal nodes are the nodes without children
         self.goal_nodes = set()
         # all nodes are the nodes in the DAG
         self.all_nodes = set()
 
+        self.edges = set()
+
+    def clear(self):
+        """
+        Clears the DAG by resetting all nodes and edges.
+        """
+        from charmstencil.kernel import get_kernel_graphs
+        self.leaf_nodes = set()
+        for node in self.all_nodes:
+            if isinstance(node, KernelDAGNode):
+                kernels = get_kernel_graphs()
+                for knl in kernels.values():
+                    if knl.kernel_id == node.kernel_id:
+                        outputs = knl.get_outputs(node.inputs)
+                        for output in outputs:
+                            output.clear()
+                            self.leaf_nodes.add(output.dag_node)
+        self.goal_nodes = set()
+        self.all_nodes = set()
         self.edges = set()
 
     def serialize(self):
@@ -158,8 +183,10 @@ class DAG(object):
         Args:
             node (DAGNode): The node to be added.
         """
-        if isinstance(node, ArrayDAGNode):
-            self.leaf_nodes.append(node)
+        print(f'Adding node {node.name} to DAG')
+        #if isinstance(node, ArrayDAGNode):
+        #    self.leaf_nodes.append(node)
+        self.leaf_nodes.add(node)
         self.all_nodes.add(node)
         self.goal_nodes.add(node)
 
@@ -171,9 +198,11 @@ class DAG(object):
             from_node (DAGNode): The source node.
             to_node (DAGNode): The destination node.
         """
-        #print(f'Adding edge from {from_node.name} to {to_node.name}')
+        print(f'Adding edge from {from_node.name} to {to_node.name}')
         if from_node in self.goal_nodes:
             self.goal_nodes.remove(from_node)
+        if to_node in self.leaf_nodes:
+            self.leaf_nodes.remove(to_node)
         self.goal_nodes.add(to_node)
         self.edges.add((from_node, to_node))
         from_node.add_edge(to_node)
@@ -207,11 +236,10 @@ def get_active_dag():
     global active_dag
     return active_dag
 
-def compute():
-    get_active_dag().compute()
 
 def show_dag():
     """
     Displays the DAG.
     """
+    print("Plotting DAG")
     get_active_dag().plot()

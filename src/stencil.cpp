@@ -103,14 +103,6 @@ void CodeGenCache::gather(int name, int index_x, int index_y, int local_dim, int
 
     if (gathered_arrays[name].first == num_chares * num_chares)
     {
-        // for (int j = start_y; j < stop_y; j++) {
-        //     for (int i = start_x; i < stop_x; i++) {
-        //         int index = j * total_dim + i;
-        //         printf("Data[%d][%d] = %f\n", j, i, all_data[index]);
-        //     }
-        // }
-
-        // done gathering
         CcsSendDelayedReply(fetch_reply, sizeof(float) * total_dim * total_dim, all_data);
         free(all_data);
         gathered_arrays.erase(name);

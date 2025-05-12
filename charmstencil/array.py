@@ -25,6 +25,7 @@ class Array(object):
         # after this array is written to by a kernel, this is the KernelDAGNode
         # that wrote to this array
         self.dag_node = ArrayDAGNode(self.name, self)
+        self.base_node = self.dag_node
         get_active_dag().add_node(self.dag_node)
         # TODO get ghost data from kwargs
 
@@ -55,6 +56,10 @@ class Array(object):
     def inc_generation(self, kernel_node):
         self.dag_node = kernel_node
         self.generation += 1
+
+    def clear(self):
+        self.dag_node = self.base_node
+        self.dag_node.clear()
 
 def create_array(shape=None, **kwargs):
     """
