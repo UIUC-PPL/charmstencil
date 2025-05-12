@@ -365,12 +365,13 @@ std::string Kernel::generate_signature(Context* ctx)
 std::string Kernel::generate_code(Context* ctx)
 {
     ctx->set_active_kernel(this);
+    std::string body = generate_body(ctx);
     return fmt::format("{}\n{{\n{}\n{}\n{}\n{}\n}}", 
         generate_signature(ctx), 
         generate_variable_declarations(ctx),
         generate_shared_memory_declarations(ctx),
         generate_shared_memory_population(ctx),
-        generate_body(ctx));
+        body);
     ctx->reset_active_kernel();
 }
 
