@@ -604,15 +604,16 @@ void Stencil::execute_kernel(KernelDAGNode* node)
         int threads_per_block[2];
         int grid_dims[2];
         kernel->get_launch_params(bounds, threads_per_block, grid_dims);
-        //DEBUG_PRINT("PE %i> Launch kernel (%i, %i); grid (%i, %i); num_args = %i\n", 
-        //    CkMyPe(), threads_per_block[0], threads_per_block[1], grid_dims[0], grid_dims[1], args.size());
-        launch_kernel(args, fn, compute_stream, threads_per_block, grid_dims);
-        //CkCallback* cb = new CkCallback(CkIndex_Stencil::kernel_done(NULL), thisProxy[thisIndex]);
-        //KernelCallbackMsg* msg = new KernelCallbackMsg(node->node_id);
-        //hapiAddCallback(compute_stream, cb, msg);
-        //delete cb;
+        
+        int shmem_size = 0;
+        for (int idx : kernel->context->shmem_info)
+            shmem_size += sizeof(float) * (threads_per_block[0] + 2 * kernel->ghost_info[idx]) * (threads_per_block[1] + 2 * kernel->ghost_info[idx]);
+        
+        DEBUG_PRINT("PE %i> Launch kernel (%i, %i); grid (%i, %i); num_args = %i, shmem = %i\n", 
+            CkMyPe(), threads_per_block[0], threads_per_block[1], grid_dims[0], grid_dims[1], args.size(), shmem_size);
+        
+        launch_kernel(args, fn, compute_stream, shmem_size, threads_per_block, grid_dims);
     }
-    //else
         
     mark_done(node);
 

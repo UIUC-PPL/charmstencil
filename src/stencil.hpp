@@ -49,7 +49,7 @@ extern void invoke_init_array(float* array, int total_size, cudaStream_t& stream
 extern CUfunction load_kernel(size_t &hash, int suffix);
 
 extern void launch_kernel(std::vector<void*> args, CUfunction& compute_kernel, cudaStream_t& stream,
-    int* threads_per_block, int* grid);
+    int shmem_size, int* threads_per_block, int* grid);
 
 
 extern CProxy_CodeGenCache codegen_proxy;

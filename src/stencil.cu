@@ -192,14 +192,16 @@ CUfunction load_kernel(size_t &hash, int suffix)
 }
 
 void launch_kernel(std::vector<void*> args, CUfunction& compute_kernel, cudaStream_t& stream,
-    int* threads_per_block, int* grid)
+    int shmem_size, int* threads_per_block, int* grid)
 {
     // figure out how to load compute kernel
     //printf("Launch kernel: %d %d %d %d\n", threads_per_block[0], threads_per_block[1], grid[0], grid[1]);
+    //cudaStreamSynchronize(stream);
     CHECK(cuLaunchKernel(compute_kernel, 
         grid[0], grid[1], 1,
         threads_per_block[0], threads_per_block[1], 1,
-        0, stream, args.data(), NULL));
+        shmem_size, stream, args.data(), NULL));
+    //cudaStreamSynchronize(stream);
     //cuStreamSynchronize(stream);
     //hapiCheck(cudaPeekAtLastError());
 }

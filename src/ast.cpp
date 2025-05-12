@@ -3,12 +3,16 @@
 #define GET_START(slice, shape, i) ((slice).index[i].start < 0 ? ((shape)[i] + (slice).index[i].start) : (slice).index[i].start)
 #define GET_STOP(slice, shape, i) (std::min((slice).index[i].stop <= 0 ? ((shape)[i] + (slice).index[i].stop) : (slice).index[i].stop, (shape)[i]))
 
-Context::Context() : active(-1), prev_active(-1), lhs_slice(nullptr) {}
+Context::Context() : lhs_slice(nullptr) {}
 
 void Context::set_active(int name)
 {
-    prev_active = active;
-    active = name;
+    active_stack.push(name);
+}
+
+int Context::get_active()
+{
+    return active_stack.top();
 }
 
 void Context::set_lhs_slice(Slice* slice)
@@ -21,9 +25,13 @@ void Context::set_active_kernel(Kernel* kernel)
     active_kernel = kernel;
 }
 
-void Context::reset()
+void Context::reset_active()
 {
-    active = prev_active;
+    active_stack.pop();
+}
+
+void Context::reset_slice()
+{
     lhs_slice = nullptr;
 }
 
@@ -34,20 +42,36 @@ void Context::reset_active_kernel()
 
 std::string Context::get_step()
 {
-    return fmt::format("stride_{}", active); // Placeholder for actual step calculation
+    if (is_shmem(get_active())) 
+        return fmt::format("blockDim.x + 2 * {}", active_kernel->ghost_info[get_active()]);
+    else 
+        return fmt::format("stride_{}", get_active());
 }
 
 void Context::register_output_slice(Slice& slice)
 {
     if (active_kernel)
     {
-        active_kernel->register_output_slice(active, slice);
+        active_kernel->register_output_slice(get_active(), slice);
     }
+}
+
+void Context::register_shared_memory_access(int argname)
+{
+    shmem_info.insert(argname);
+}
+
+bool Context::is_shmem(int argname)
+{
+    return shmem_info.find(argname) != shmem_info.end();
 }
 
 std::string ArrayNode::generate_code(Context* ctx)
 {
-    return fmt::format("a_{}", arg_index);
+    if (ctx->is_shmem(arg_index))
+        return fmt::format("sa_{}", arg_index);
+    else
+        return fmt::format("a_{}", arg_index);
 }
 
 std::string ArrayNode::generate_bounds_check(Context* ctx)
@@ -65,16 +89,33 @@ std::string SliceNode::generate_code(Context* ctx)
     }
     else
     {
+        // this is a getitem operation
         Slice offset = slice.calculate_relative(*(ctx->lhs_slice));
-        return fmt::format("IDX2D((idy + {}) * {}, (idx + {}) * {}, {})", offset.index[1].start, offset.index[1].step, 
-            offset.index[0].start, offset.index[0].step, ctx->get_step());
+        ctx->register_shared_memory_access(ctx->get_active());
+        //return fmt::format("IDX2D((idy + {}) * {}, (idx + {}) * {}, {})", offset.index[1].start, offset.index[1].step, 
+        //    offset.index[0].start, offset.index[0].step, ctx->get_step());
+        std::string idy = ctx->is_shmem(ctx->get_active()) ? "s_idy" : "idy";
+        std::string idx = ctx->is_shmem(ctx->get_active()) ? "s_idx" : "idx";
+        return fmt::format("IDX2D(({} + {}) * {}, ({} + {}) * {}, {})", 
+            idy, offset.index[1].start, offset.index[1].step, 
+            idx, offset.index[0].start, offset.index[0].step, 
+            ctx->get_step());
     }
 }
 
 std::string SliceNode::generate_index_map(Context* ctx)
 {
-    std::string code = fmt::format("idx = startx_{} + {} * tx;\n", ctx->active, slice.index[0].step);
-    code += fmt::format("idy = starty_{} + {} * ty;\n", ctx->active, slice.index[1].step);
+    std::string code = fmt::format("idx = startx_{} + {} * tx;\n", ctx->get_active(), slice.index[0].step);
+    code += fmt::format("idy = starty_{} + {} * ty;\n", ctx->get_active(), slice.index[1].step);
+
+    // shared memory access
+    //if (ctx->is_shmem(ctx->get_active()))
+    //{
+    code += fmt::format("s_idx = {} * threadIdx.x + {};\n", slice.index[0].step, 
+        ctx->active_kernel->ghost_info[ctx->get_active()]);
+    code += fmt::format("s_idy = {} * threadIdx.y + {};\n", slice.index[1].step, 
+        ctx->active_kernel->ghost_info[ctx->get_active()]);
+    //}
     return code;
 }
 
@@ -109,8 +150,9 @@ std::string OperationNode::generate_code(Context* ctx)
         case Operation::getitem:
         {
             ctx->set_active(static_cast<ArrayNode*>(operands[0])->arg_index);
-            return fmt::format("({}[{}])", operands[0]->generate_code(ctx), operands[1]->generate_code(ctx));
-            ctx->reset();
+            std::string code = fmt::format("({}[{}])", operands[0]->generate_code(ctx), operands[1]->generate_code(ctx));
+            ctx->reset_active();
+            return code;
         }
 
         case Operation::setitem:
@@ -118,11 +160,15 @@ std::string OperationNode::generate_code(Context* ctx)
             ctx->set_active(static_cast<ArrayNode*>(operands[0])->arg_index);
             ctx->register_output_slice(static_cast<SliceNode*>(operands[1])->slice);
             std::string index_map_code = static_cast<SliceNode*>(operands[1])->generate_index_map(ctx);
+            
+            std::string lhs_index = operands[1]->generate_code(ctx);
             ctx->set_lhs_slice(&(static_cast<SliceNode*>(operands[1]))->slice);
-            return fmt::format("{}\nif({})\n{{\n{}[{}] = {};\n}}\n", index_map_code,
+            std::string code = fmt::format("{}\nif({})\n{{\n{}[{}] = {};\n}}\n", index_map_code,
                 static_cast<ArrayNode*>(operands[0])->generate_bounds_check(ctx),
-                operands[0]->generate_code(ctx), operands[1]->generate_code(ctx), operands[2]->generate_code(ctx));
-            ctx->reset();
+                operands[0]->generate_code(ctx), lhs_index, operands[2]->generate_code(ctx));
+            ctx->reset_slice();
+            ctx->reset_active();
+            return code;
         }
 
         default:
@@ -197,10 +243,76 @@ void Kernel::get_launch_params(std::vector<Slice*> &bounds, int* threads_per_blo
     grid_dims[1] = (global_nty + threads_per_block[1] - 1) / threads_per_block[1];
 }
 
+std::string Kernel::generate_shared_memory_declarations(Context* ctx)
+{
+    std::string code = "extern __shared__ float shmem_data[];\n"
+                      "int offset = 0;\n";
+    
+    for (const auto& argname : ctx->shmem_info)
+    {
+        code += fmt::format("float* sa_{} = &(shmem_data[offset]);\n", argname);
+        code += fmt::format("offset += (blockDim.x + 2 * {0}) * (blockDim.y + 2 * {0});\n", 
+            ghost_info[argname]);
+    }
+
+    return code;
+}
+
+std::string Kernel::generate_shared_memory_population(Context* ctx)
+{
+    std::string code = "";
+
+    // local data
+    for (const auto& argname : ctx->shmem_info)
+    {
+        DEBUG_PRINT("argname = %i, ghost = %i\n", argname, ghost_info[argname]);
+
+        code += fmt::format("sa_{0}[IDX2D(threadIdx.y + {1}, threadIdx.x + {1}, blockDim.x + 2 * {1})]"
+            " = a_{0}[IDX2D(starty_{2} + ty, startx_{2} + tx, stride_{0})];\n", 
+            argname, ghost_info[argname], ctx->active_kernel->outputs[0]);
+
+        DEBUG_PRINT("code = %s\n", code.c_str());
+    }
+
+    // ghost data
+    // FIXME - fix the start, stop indices
+    for (const auto& argname : ctx->shmem_info)
+    {
+        code += fmt::format("if (threadIdx.x < {}) {{\n", ghost_info[argname]);
+        
+        code += fmt::format("sa_{0}[IDX2D(threadIdx.y + {1}, threadIdx.x, blockDim.x + 2 * {1})]"
+            " = a_{0}[IDX2D(starty_{2} + ty, startx_{2} + tx - {1}, stride_{0})];\n", 
+            argname, ghost_info[argname], ctx->active_kernel->outputs[0]);
+
+        code += fmt::format("sa_{0}[IDX2D(threadIdx.y + {1}, threadIdx.x + {1} + blockDim.x, blockDim.x + 2 * {1})]"
+            " = a_{0}[IDX2D(starty_{2} + ty, startx_{2} + tx + blockDim.x, stride_{0})];\n", 
+            argname, ghost_info[argname], ctx->active_kernel->outputs[0]);
+
+        code += "}\n\n";
+
+        code += fmt::format("if (threadIdx.y < {}) {{\n", ghost_info[argname]);
+        
+        code += fmt::format("sa_{0}[IDX2D(threadIdx.y, threadIdx.x + {1}, blockDim.x + 2 * {1})]"
+            " = a_{0}[IDX2D(starty_{2} + ty - {1}, startx_{2} + tx, stride_{0})];\n", 
+            argname, ghost_info[argname], ctx->active_kernel->outputs[0]);
+
+        code += fmt::format("sa_{0}[IDX2D(threadIdx.y + {1} + blockDim.y, threadIdx.x + {1}, blockDim.x + 2 * {1})]"
+            " = a_{0}[IDX2D(starty_{2} + ty + blockDim.y, startx_{2} + tx, stride_{0})];\n", 
+            argname, ghost_info[argname], ctx->active_kernel->outputs[0]);
+
+        code += "}\n\n";
+
+        //DEBUG_PRINT("code = %s\n", code.c_str());
+    }
+
+    code += "__syncthreads();";
+    return code;
+}
+
 std::string Kernel::generate_variable_declarations(Context* ctx)
 {
     std::string code = "";
-    code += "int idx, idy;\n";
+    code += "int idx, idy, s_idx, s_idy;\n";
     code += "int tx = blockIdx.x * blockDim.x + threadIdx.x;\n";
     code += "int ty = blockIdx.y * blockDim.y + threadIdx.y;\n";
     return code;
@@ -211,7 +323,7 @@ std::string Kernel::generate_body(Context* ctx)
     std::string code = "";
     for (auto& node : nodes)
     {
-        code += fmt::format("\n{{\n{}\n}}\n", node->generate_code(ctx));
+        code += fmt::format("\n{{\n{}\n{}\n}}\n", node->generate_code(ctx), generate_debug(ctx));
     }
     return code;
 }
@@ -219,8 +331,9 @@ std::string Kernel::generate_body(Context* ctx)
 std::string Kernel::generate_debug(Context* ctx)
 {
     //std::string code = "if(tx == 0 && ty == 0) printf(\"Kernel called\");\n";
-    std::string code = "";
-    return code;
+    //std::string code = "printf(\"%%i, %%i, %%i, %%i\\n\", IDX2D((s_idy + 0) * 1, (s_idx + -1) * 1, stride_0), IDX2D((s_idy + 0) * 1, (s_idx + 1) * 1, stride_0), IDX2D((s_idy + -1) * 1, (s_idx + 0) * 1, stride_0), IDX2D((s_idy + 1) * 1, (s_idx + 0) * 1, stride_0));\n";
+    //return code;
+    return "";
 }
 
 std::string Kernel::generate_arguments(Context* ctx)
@@ -250,7 +363,12 @@ std::string Kernel::generate_signature(Context* ctx)
 std::string Kernel::generate_code(Context* ctx)
 {
     ctx->set_active_kernel(this);
-    return fmt::format("{}\n{{\n{}\n{}\n{}\n}}", generate_signature(ctx), generate_variable_declarations(ctx), generate_debug(ctx), generate_body(ctx));
+    return fmt::format("{}\n{{\n{}\n{}\n{}\n{}\n}}", 
+        generate_signature(ctx), 
+        generate_variable_declarations(ctx),
+        generate_shared_memory_declarations(ctx),
+        generate_shared_memory_population(ctx),
+        generate_body(ctx));
     ctx->reset_active_kernel();
 }
 
@@ -360,6 +478,11 @@ Kernel* build_kernel(char* &cmd)
     DEBUG_PRINT("Hash: %zu\n", kernel->hash);
     kernel->num_args = extract<int>(cmd);
     DEBUG_PRINT("Num inputs: %i\n", kernel->num_args);
+    for (int i = 0; i < kernel->num_args; i++)
+    {
+        kernel->ghost_info[i] = 1;
+        //DEBUG_PRINT("Input %i: %i\n", i, input);
+    }
     kernel->num_outputs = extract<int>(cmd);
     DEBUG_PRINT("Num outputs: %i\n", kernel->num_outputs);
     for (int i = 0; i < kernel->num_outputs; i++)

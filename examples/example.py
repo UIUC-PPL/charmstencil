@@ -45,14 +45,14 @@ for i in range(500):
     jacobi(u1, u2)
     u1, u2 = u2, u1
 
-interface = CCSInterface('192.168.1.114', 1234, odf=1)
+interface = CCSInterface('10.193.151.206', 1234, odf=4)
 interface.execute()
 
-uhost = u1.get(interface)
-print(uhost)
-import matplotlib.pyplot as plt
+# uhost = u1.get(interface)
+# print(uhost)
+# import matplotlib.pyplot as plt
 
-uhost = np.array(uhost).reshape(u1.shape)
+# uhost = np.array(uhost).reshape(u1.shape)
 # plt.imshow(np.array(uhost), cmap='hot', interpolation='nearest')
 # plt.colorbar()
 # plt.title("Heatmap of u1")

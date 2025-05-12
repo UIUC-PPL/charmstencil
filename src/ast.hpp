@@ -7,6 +7,7 @@
 #define FMT_HEADER_ONLY
 #include <fmt/format.h>
 #include <cuda.h>
+#include <stack>
 #include "utils.hpp"
 #include "array.hpp"
 #include "hapi.h"
@@ -17,26 +18,35 @@ class Kernel;
 class Context
 {
 public:
-    int active;
-    int prev_active;
+    std::stack<int> active_stack;
     Slice* lhs_slice;
     Kernel* active_kernel;
+
+    std::unordered_set<int> shmem_info;
 
     Context();
 
     void set_active(int name);
 
+    int get_active();
+
     void set_lhs_slice(Slice* slice);
 
     void set_active_kernel(Kernel* kernel);
 
-    void reset();
+    void reset_active();
+
+    void reset_slice();
 
     void reset_active_kernel();
 
     std::string get_step();
 
     void register_output_slice(Slice& slice);
+
+    void register_shared_memory_access(int argname);
+
+    bool is_shmem(int argname);
 };
 
 class ASTNode 
@@ -103,6 +113,7 @@ void choose_optimal_grid(int* threads_per_block, int nx, int ny);
 class Kernel
 {
 public:
+    Context* context;
     int kernel_id;
     std::vector<ASTNode*> nodes;
     int num_args;
@@ -110,6 +121,7 @@ public:
     std::vector<int> outputs;
     size_t hash;
     std::unordered_map<int, Slice> output_slices;
+    std::unordered_map<int, int> ghost_info; // thuis is mapping argument index to ghost info
 
     void register_output_slice(int name, Slice& slice);
 
@@ -117,6 +129,10 @@ public:
 
     void get_launch_params(std::vector<Slice*> &bounds, int* threads_per_block,
          int* grid_dims);
+
+    std::string generate_shared_memory_declarations(Context* ctx);
+
+    std::string generate_shared_memory_population(Context* ctx);
 
     std::string generate_variable_declarations(Context* ctx);
 

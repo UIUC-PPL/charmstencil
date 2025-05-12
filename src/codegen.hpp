@@ -19,7 +19,7 @@ typedef CUfunction compute_fun_t;
 
 static std::string get_kernel_header();
 
-void write_kernel(FILE* genfile, Kernel* knl);
+Context* write_kernel(FILE* genfile, Kernel* knl);
 
 void generate_kernel(Kernel* knl, int suffix);
 
