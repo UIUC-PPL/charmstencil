@@ -91,7 +91,6 @@ std::string SliceNode::generate_code(Context* ctx)
     {
         // this is a getitem operation
         Slice offset = slice.calculate_relative(*(ctx->lhs_slice));
-        ctx->register_shared_memory_access(ctx->get_active());
         //return fmt::format("IDX2D((idy + {}) * {}, (idx + {}) * {}, {})", offset.index[1].start, offset.index[1].step, 
         //    offset.index[0].start, offset.index[0].step, ctx->get_step());
         std::string idy = ctx->is_shmem(ctx->get_active()) ? "s_idy" : "idy";
@@ -150,7 +149,10 @@ std::string OperationNode::generate_code(Context* ctx)
         case Operation::getitem:
         {
             ctx->set_active(static_cast<ArrayNode*>(operands[0])->arg_index);
-            std::string code = fmt::format("({}[{}])", operands[0]->generate_code(ctx), operands[1]->generate_code(ctx));
+            ctx->register_shared_memory_access(ctx->get_active());
+            std::string code = fmt::format("({}[{}])", 
+                operands[0]->generate_code(ctx), 
+                operands[1]->generate_code(ctx));
             ctx->reset_active();
             return code;
         }
@@ -363,12 +365,13 @@ std::string Kernel::generate_signature(Context* ctx)
 std::string Kernel::generate_code(Context* ctx)
 {
     ctx->set_active_kernel(this);
+    std::string body = generate_body(ctx);
     return fmt::format("{}\n{{\n{}\n{}\n{}\n{}\n}}", 
         generate_signature(ctx), 
         generate_variable_declarations(ctx),
         generate_shared_memory_declarations(ctx),
         generate_shared_memory_population(ctx),
-        generate_body(ctx));
+        body);
     ctx->reset_active_kernel();
 }
 
