@@ -45,7 +45,7 @@ for i in range(500):
     jacobi(u1, u2)
     u1, u2 = u2, u1
 
-interface = CCSInterface('10.193.151.206', 1234, odf=4)
+interface = CCSInterface('192.168.1.114', 1234, odf=4)
 interface.execute()
 
 # uhost = u1.get(interface)

@@ -503,6 +503,9 @@ Kernel* build_kernel(char* &cmd)
 void choose_optimal_grid(int* threads_per_block, int nx, int ny)
 {
     // FIXME - use a better heuristic later
-    threads_per_block[0] = 32;
-    threads_per_block[1] = 32;
+    threads_per_block[0] = std::min(16, nx);
+    threads_per_block[0] = std::pow(2, std::floor(std::log2(threads_per_block[0])));
+    threads_per_block[1] = std::min(256 / threads_per_block[0], ny);
+    threads_per_block[1] = std::pow(2, std::floor(std::log2(threads_per_block[1])));
+    //threads_per_block[1] = std::min(1024 / threads_per_block[0], ny);
 }
