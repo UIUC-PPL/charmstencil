@@ -61,13 +61,14 @@ public:
 
     static void disconnection_handler(char* msg)
     {
-        char* cmd = msg + CmiMsgHeaderSizeBytes;
-        stencil.ckDestroy();
-#ifndef NDEBUG
-        CkPrintf("Disconnected from server\n");
-#endif
-        char res;
-        CcsSendReply(1, &res);
+        CkExit();
+//         char* cmd = msg + CmiMsgHeaderSizeBytes;
+//         stencil.ckDestroy();
+// #ifndef NDEBUG
+//         CkPrintf("Disconnected from server\n");
+// #endif
+//         char res;
+//         CcsSendReply(1, &res);
     }
 
     static CProxy_Stencil create_stencil(int odf)
