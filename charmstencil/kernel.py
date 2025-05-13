@@ -25,15 +25,27 @@ def get_active_kernel_graph():
 
 def capture_kernel_graph(f, args):
     """Capture the kernel graph from the function."""
+    from charmstencil.array import Array
     global active_graph
     active_graph = KernelGraph(f.__name__)
-    active_graph.args = [KernelParameter(idx) for idx, arg in enumerate(args)]
-    f(*active_graph.args)
+    active_graph.args = []
+    idx = 0
+    func_args = []
+    for arg in args:
+        if isinstance(arg, Array):
+            param = KernelParameter(idx)
+            active_graph.args.append(param)
+            func_args.append(param)
+            idx += 1
+        else:
+            func_args.append(arg)
+    f(*func_args)
     kernel_graphs[f.__name__] = active_graph
     active_graph = None
 
 def kernel(f):
     """Decorator to mark a function as a kernel."""
+    from charmstencil.array import Array
     f.is_kernel = True
     
     def wrapper(*args):
@@ -46,11 +58,17 @@ def kernel(f):
         outputs = active_graph.get_outputs(args)
         # now find the inputs and outputs and add call to the DAG
         dag = get_active_dag()
-        kernel_node = KernelDAGNode(f.__name__, active_graph.kernel_id, args)
+        array_args = []
+        for arg in args:
+            if isinstance(arg, Array):
+                array_args.append(arg)
+        kernel_node = KernelDAGNode(f.__name__, active_graph.kernel_id,
+                                    array_args)
         dag.add_node(kernel_node)
         # inputs are the Array objects
         for inp in args:
-            dag.add_edge(inp.dag_node, kernel_node)
+            if isinstance(inp, Array):
+                dag.add_edge(inp.dag_node, kernel_node)
 
         for out in outputs:
             out.inc_generation(kernel_node)

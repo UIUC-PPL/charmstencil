@@ -344,7 +344,7 @@ std::string Kernel::generate_arguments(Context* ctx)
 
     for (int i = 0; i < num_args; i++)
     {
-        oss << fmt::format("float* a_{0}, int stride_{0}, ", i);
+        oss << fmt::format("float* __restrict__ a_{0}, int stride_{0}, ", i);
     }
 
     for (int i = 0; i < num_outputs; i++)
