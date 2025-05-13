@@ -3,10 +3,8 @@ from charmstencil.array import create_array
 from charmstencil.dag import show_dag, get_active_dag
 from charmstencil.interface import CCSInterface
 import numpy as np
+import sys
 
-#@kernel
-#def boundary0(u1):
-#    u1[:, :] = 0
 
 @kernel
 def boundary1(u1, u2):
@@ -34,10 +32,12 @@ def jacobi(u1, u2):
     u2[1:-1, 1:-1] = 0.25 * (u1[:-2, 1:-1] + u1[2:, 1:-1] + u1[1:-1, :-2] + u1[1:-1, 2:])
 
 
-interface = CCSInterface('192.168.1.114', 1234, odf=4)
+interface = CCSInterface('129.114.17.0', 1234, odf=4)
 
-u1 = create_array((16384, 16384))
-u2 = create_array((16384, 16384))
+n = int(sys.argv[1])
+
+u1 = create_array((n, n))
+u2 = create_array((n, n))
 
 #boundary0(u1)
 boundary1(u1, u2)
@@ -45,7 +45,7 @@ boundary2(u1, u2)
 boundary3(u1, u2)
 boundary4(u1, u2)
 
-for i in range(3):
+for i in range(10):
     jacobi(u1, u2)
 
 interface.execute()
@@ -58,6 +58,7 @@ for i in range(100):
 
 #show_dag()
 interface.execute()
+interface.exit()
 
 # uhost = u1.get(interface)
 # print(uhost)

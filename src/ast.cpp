@@ -176,6 +176,8 @@ std::string OperationNode::generate_code(Context* ctx)
         default:
             break;
     }
+
+    return "";
 }
 
 
@@ -344,7 +346,7 @@ std::string Kernel::generate_arguments(Context* ctx)
 
     for (int i = 0; i < num_args; i++)
     {
-        oss << fmt::format("float* a_{0}, int stride_{0}, ", i);
+        oss << fmt::format("float* __restrict__ a_{0}, int stride_{0}, ", i);
     }
 
     for (int i = 0; i < num_outputs; i++)
@@ -366,13 +368,14 @@ std::string Kernel::generate_code(Context* ctx)
 {
     ctx->set_active_kernel(this);
     std::string body = generate_body(ctx);
-    return fmt::format("{}\n{{\n{}\n{}\n{}\n{}\n}}", 
+    std::string code = fmt::format("{}\n{{\n{}\n{}\n{}\n{}\n}}", 
         generate_signature(ctx), 
         generate_variable_declarations(ctx),
         generate_shared_memory_declarations(ctx),
         generate_shared_memory_population(ctx),
         body);
     ctx->reset_active_kernel();
+    return code;
 }
 
 ASTNode* build_noop(char* &cmd)

@@ -36,7 +36,7 @@
     }                                                        \
   }
 
-#define BSZ1D 128
+#define BSZ1D 1024
 #define BSZ2D 16
 #define IDX2D(y, x, stride) ((y) * (stride) + (x))
 

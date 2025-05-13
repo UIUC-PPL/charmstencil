@@ -53,6 +53,7 @@ void CodeGenCache::operation_done(double start)
     double runtime = CmiWallTimer() - start;
     CkPrintf("Execution took %f seconds\n", runtime);
     CcsSendDelayedReply(operation_reply, sizeof(double), &runtime);
+    //CkExit();
 }
 
 void CodeGenCache::gather(int name, int index_x, int index_y, int local_dim, int num_chares, int data_size, float* data)
