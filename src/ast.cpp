@@ -1,4 +1,5 @@
 #include "ast.hpp"
+#include "analysis.hpp"
 
 #define GET_START(slice, shape, i) ((slice).index[i].start < 0 ? ((shape)[i] + (slice).index[i].start) : (slice).index[i].start)
 #define GET_STOP(slice, shape, i) (std::min((slice).index[i].stop <= 0 ? ((shape)[i] + (slice).index[i].stop) : (slice).index[i].stop, (shape)[i]))
@@ -59,6 +60,19 @@ void Context::register_output_slice(Slice& slice)
 void Context::register_shared_memory_access(int argname)
 {
     shmem_info.insert(argname);
+}
+
+void Context::register_access(Slice& slice)
+{
+    int offsetx = abs(lhs_slice->index[0].start - slice.index[0].start);
+    int offsety = abs(lhs_slice->index[1].start - slice.index[1].start);
+    int offset = std::max(offsetx, offsety);
+    if (active_kernel)
+    {
+        active_kernel->ghost_info[get_active()] = std::max(active_kernel->ghost_info[get_active()], offset);
+        if (active_kernel->mem_access_info[get_active()].find(slice) == active_kernel->mem_access_info[get_active()].end())
+            active_kernel->mem_access_info[get_active()].insert(slice);
+    }
 }
 
 bool Context::is_shmem(int argname)
@@ -149,7 +163,6 @@ std::string OperationNode::generate_code(Context* ctx)
         case Operation::getitem:
         {
             ctx->set_active(static_cast<ArrayNode*>(operands[0])->arg_index);
-            ctx->register_shared_memory_access(ctx->get_active());
             std::string code = fmt::format("({}[{}])", 
                 operands[0]->generate_code(ctx), 
                 operands[1]->generate_code(ctx));
@@ -249,6 +262,9 @@ void Kernel::get_launch_params(std::vector<Slice*> &bounds, int* threads_per_blo
 
 std::string Kernel::generate_shared_memory_declarations(Context* ctx)
 {
+    if (ctx->shmem_info.empty())
+        return "";
+
     std::string code = "extern __shared__ float shmem_data[];\n"
                       "int offset = 0;\n";
     
@@ -309,7 +325,9 @@ std::string Kernel::generate_shared_memory_population(Context* ctx)
         //DEBUG_PRINT("code = %s\n", code.c_str());
     }
 
-    code += "__syncthreads();";
+    if (!ctx->shmem_info.empty())
+        code += "__syncthreads();";
+
     return code;
 }
 
@@ -486,7 +504,8 @@ Kernel* build_kernel(char* &cmd)
     DEBUG_PRINT("Num inputs: %i\n", kernel->num_args);
     for (int i = 0; i < kernel->num_args; i++)
     {
-        kernel->ghost_info[i] = 1;
+        kernel->ghost_info[i] = 0;
+        kernel->mem_access_info[i] = std::unordered_set<Slice, SliceHash>();
         //DEBUG_PRINT("Input %i: %i\n", i, input);
     }
     kernel->num_outputs = extract<int>(cmd);
@@ -503,6 +522,12 @@ Kernel* build_kernel(char* &cmd)
         ASTNode* node = build_ast(cmd);
         kernel->nodes.push_back(node);
     }
+    for (int i = 0; i < kernel->nodes.size(); i++)
+    {
+        kernel->context = new Context();
+        traverse_ast(kernel->nodes[i], kernel->context);
+    }
+    finalize_analysis(kernel->context);
     return kernel;
 }
 

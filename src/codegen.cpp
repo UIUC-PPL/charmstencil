@@ -55,10 +55,9 @@ static std::string get_kernel_header()
 
 Context* write_kernel(FILE* genfile, Kernel* knl)
 {
-    Context* ctx = new Context();
-    std::string code = format_cpp(get_kernel_header() + knl->generate_code(ctx));
+    std::string code = format_cpp(get_kernel_header() + knl->generate_code(knl->context));
     fprintf(genfile, code.c_str());
-    return ctx;
+    return knl->context;
 }
 
 void generate_kernel(Kernel* knl, int suffix)

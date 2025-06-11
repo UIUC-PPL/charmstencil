@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #define FMT_HEADER_ONLY
 #include <fmt/format.h>
@@ -45,6 +46,8 @@ public:
     void register_output_slice(Slice& slice);
 
     void register_shared_memory_access(int argname);
+
+    void register_access(Slice& slice);
 
     bool is_shmem(int argname);
 };
@@ -122,6 +125,7 @@ public:
     size_t hash;
     std::unordered_map<int, Slice> output_slices;
     std::unordered_map<int, int> ghost_info; // thuis is mapping argument index to ghost info
+    std::unordered_map<int, std::unordered_set<Slice, SliceHash>> mem_access_info;
 
     void register_output_slice(int name, Slice& slice);
 

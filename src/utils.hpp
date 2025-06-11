@@ -72,6 +72,11 @@ struct Slice1D
         step = other.step;
     }
 
+    bool operator==(const Slice1D& other) const
+    {
+        return start == other.start && stop == other.stop && step == other.step;
+    }
+
     Slice1D calculate_relative(Slice1D& base)
     {
         Slice1D offset;
@@ -95,12 +100,47 @@ struct Slice
         index[1] = other.index[1];
     }
 
+    bool operator==(const Slice& other) const
+    {
+        return index[0] == other.index[0] && index[1] == other.index[1];
+    }
+
     Slice calculate_relative(Slice& base)
     {
         Slice offset;
         offset.index[0] = index[0].calculate_relative(base.index[0]);
         offset.index[1] = index[1].calculate_relative(base.index[1]);
         return offset;
+    }
+};
+
+struct Slice1DHash 
+{
+    size_t operator()(const Slice1D& s) const 
+    {
+        std::size_t h1 = std::hash<int>{}(s.start);
+        std::size_t h2 = std::hash<int>{}(s.stop);
+        std::size_t h3 = std::hash<int>{}(s.step);
+
+        std::size_t seed = h1;
+        seed ^= h2 + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        seed ^= h3 + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        
+        return seed;
+    }
+};
+
+struct SliceHash 
+{
+    size_t operator()(const Slice& s) const 
+    {
+        Slice1DHash hash1d;
+        std::size_t h1 = hash1d(s.index[0]);
+        std::size_t h2 = hash1d(s.index[1]);
+
+        std::size_t seed = h1;
+        seed ^= h2 + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        return seed;
     }
 };
 

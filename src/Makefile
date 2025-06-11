@@ -29,6 +29,9 @@ utils.o: utils.cpp utils.hpp
 ast.o: ast.cpp ast.hpp array.hpp utils.hpp
 	$(CHARMC) -c $< $(OPTS) $(CHARM_INC)
 
+analysis.o: analysis.cpp analysis.hpp array.hpp utils.hpp ast.hpp
+	$(CHARMC) -c $< $(OPTS) $(CHARM_INC)
+
 dag.o: dag.cpp dag.hpp array.hpp utils.hpp ast.hpp
 	$(CHARMC) -c $< $(OPTS) $(CHARM_INC)
 
@@ -41,8 +44,8 @@ stencil.o: stencil.cpp stencil.hpp array.hpp utils.hpp ast.hpp dag.hpp
 stencilCUDA.o: stencil.cu stencil.hpp
 	$(NVCC) -o $@ $(NVCC_FLAGS) $(CHARM_INC) $<
 
-server.out: server.o stencilCUDA.o stencil.o ast.o utils.o codegen.o dag.o
-	$(CHARMC) -language charm++ -o $@ server.o stencilCUDA.o ast.o dag.o codegen.o utils.o stencil.o $(LD_LIBS)
+server.out: server.o stencilCUDA.o stencil.o ast.o utils.o codegen.o dag.o analysis.o
+	$(CHARMC) -language charm++ -o $@ server.o stencilCUDA.o ast.o dag.o codegen.o utils.o stencil.o analysis.o $(LD_LIBS)
 
 run-server: server.out
 	LD_LIBRARY_PATH=/home/sb56/anaconda3/envs/charm/lib ./charmrun +p4 ./server.out ++server ++server-port 10000
