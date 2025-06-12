@@ -4,7 +4,7 @@
 #define GET_START(slice, shape, i) ((slice).index[i].start < 0 ? ((shape)[i] + (slice).index[i].start) : (slice).index[i].start)
 #define GET_STOP(slice, shape, i) (std::min((slice).index[i].stop <= 0 ? ((shape)[i] + (slice).index[i].stop) : (slice).index[i].stop, (shape)[i]))
 
-Context::Context() : lhs_slice(nullptr) {}
+Context::Context() : lhs_slice(nullptr), active_kernel(nullptr) {}
 
 void Context::set_active(int name)
 {
@@ -522,12 +522,15 @@ Kernel* build_kernel(char* &cmd)
         ASTNode* node = build_ast(cmd);
         kernel->nodes.push_back(node);
     }
+    
+    kernel->context = new Context();
+    kernel->context->set_active_kernel(kernel);
     for (int i = 0; i < kernel->nodes.size(); i++)
     {
-        kernel->context = new Context();
         traverse_ast(kernel->nodes[i], kernel->context);
     }
     finalize_analysis(kernel->context);
+    kernel->context->reset_active_kernel();
     return kernel;
 }
 
