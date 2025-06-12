@@ -17,6 +17,7 @@ void traverse_ast(ASTNode* node, Context* ctx)
             {
                 traverse_ast(operands[0], ctx);
                 traverse_ast(operands[1], ctx);
+                break;
             }
             
             case Operation::getitem:
@@ -26,6 +27,7 @@ void traverse_ast(ASTNode* node, Context* ctx)
                 traverse_ast(operands[0], ctx);
                 traverse_ast(operands[1], ctx);
                 ctx->reset_active();
+                break;
             }
 
             case Operation::setitem:
@@ -36,6 +38,7 @@ void traverse_ast(ASTNode* node, Context* ctx)
                 traverse_ast(operands[2], ctx);
                 ctx->reset_slice();
                 ctx->reset_active();
+                break;
             }
 
             default:
