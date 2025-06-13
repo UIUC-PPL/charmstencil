@@ -3,7 +3,7 @@ CHARMC=$(CHARMDIR)/mpi-linux-x86_64-cuda/bin/charmc
 CHARM_INC=-I$(CHARMDIR)/include
 NVCC=nvcc
 NVCC_FLAGS=-c -std=c++17  -use_fast_math -O3 -I/home1/08450/tg877491/vcpkg/installed/arm64-linux/include
-OPTS=-c++-option -std=c++17 -O3 -g -ldl -I/home1/08450/tg877491/vcpkg/installed/arm64-linux/include -DNDEBUG
+OPTS=-c++-option -std=c++17 -O3 -g -ldl -I/home1/08450/tg877491/vcpkg/installed/arm64-linux/include #-DNDEBUG
 LD_LIBS=-lcuda
 
 all: server.out

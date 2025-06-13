@@ -582,10 +582,10 @@ void Stencil::execute_kernel(KernelDAGNode* node)
         args.push_back(&(bound->index[1].start));
         args.push_back(&(bound->index[1].stop));
         //if(thisIndex.x == 0 && thisIndex.y == 0)
-        //DEBUG_PRINT("Chare (%i, %i)> Bounds: (%i : %i), (%i : %i)\n",
-        //    index[0], index[1],
-        //    bound->index[0].start, bound->index[0].stop,
-        //    bound->index[1].start, bound->index[1].stop);
+        DEBUG_PRINT("Chare (%i, %i)> Bounds: (%i : %i), (%i : %i)\n",
+            index[0], index[1],
+            bound->index[0].start, bound->index[0].stop,
+            bound->index[1].start, bound->index[1].stop);
         array->generation++;
         //if (thisIndex.x == 0 && thisIndex.y == 0)
         //    DEBUG_PRINT("PE %i> Kernel %i, array %i, generation = %i\n", CkMyPe(), node->node_id, output, array->generation);

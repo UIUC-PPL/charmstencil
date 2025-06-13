@@ -32,7 +32,7 @@ def jacobi(u1, u2):
     u2[1:-1, 1:-1] = 0.25 * (u1[:-2, 1:-1] + u1[2:, 1:-1] + u1[1:-1, :-2] + u1[1:-1, 2:])
 
 
-interface = CCSInterface('192.168.1.209', 1234, odf=4)
+interface = CCSInterface('192.168.1.209', 1234, odf=1)
 
 n = int(sys.argv[1])
 
