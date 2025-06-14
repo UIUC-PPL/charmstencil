@@ -106,8 +106,8 @@ std::string SliceNode::generate_code(Context* ctx)
         Slice offset = slice.calculate_relative(*(ctx->lhs_slice));
         //return fmt::format("IDX2D((idy + {}) * {}, (idx + {}) * {}, {})", offset.index[1].start, offset.index[1].step, 
         //    offset.index[0].start, offset.index[0].step, ctx->get_step());
-        std::string idy = ctx->is_shmem(ctx->get_active()) ? "s_idy" : "idy";
-        std::string idx = ctx->is_shmem(ctx->get_active()) ? "s_idx" : "idx";
+        std::string idy = ctx->is_shmem(ctx->get_active()) ? fmt::format("s_idy{}", ctx->get_active()) : "idy";
+        std::string idx = ctx->is_shmem(ctx->get_active()) ? fmt::format("s_idx{}", ctx->get_active()) : "idx";
         return fmt::format("IDX2D(({} + {}) * {}, ({} + {}) * {}, {})", 
             idy, offset.index[1].start, offset.index[1].step, 
             idx, offset.index[0].start, offset.index[0].step, 
@@ -120,13 +120,22 @@ std::string SliceNode::generate_index_map(Context* ctx)
     std::string code = fmt::format("idx = startx_{} + {} * tx;\n", ctx->get_active(), slice.index[0].step);
     code += fmt::format("idy = starty_{} + {} * ty;\n", ctx->get_active(), slice.index[1].step);
 
+    // Print ghost_info map
+    DEBUG_PRINT("ghost_info: ");
+    for (const auto& entry : ctx->active_kernel->ghost_info) {
+        DEBUG_PRINT("[%i]=%i ", entry.first, entry.second);
+    }
+    DEBUG_PRINT("\n");
+
     // shared memory access
     //if (ctx->is_shmem(ctx->get_active()))
     //{
-    code += fmt::format("s_idx = {} * threadIdx.x + {};\n", slice.index[0].step, 
-        ctx->active_kernel->ghost_info[ctx->get_active()]);
-    code += fmt::format("s_idy = {} * threadIdx.y + {};\n", slice.index[1].step, 
-        ctx->active_kernel->ghost_info[ctx->get_active()]);
+    for (const auto& entry : ctx->shmem_info) 
+    {
+        code += fmt::format("s_idx{} = {} * threadIdx.x + {};\n", entry, slice.index[0].step, ctx->active_kernel->ghost_info[entry]);
+        code += fmt::format("s_idy{} = {} * threadIdx.y + {};\n", entry, slice.index[1].step, ctx->active_kernel->ghost_info[entry]);
+    }
+
     //}
     return code;
 }
@@ -333,7 +342,11 @@ std::string Kernel::generate_shared_memory_population(Context* ctx)
 std::string Kernel::generate_variable_declarations(Context* ctx)
 {
     std::string code = "";
-    code += "int idx, idy, s_idx, s_idy;\n";
+    code += "int idx, idy;\n";
+    for (const auto& argname : ctx->shmem_info)
+    {
+        code += fmt::format("int s_idx{}, s_idy{};\n", argname, argname);
+    }
     code += "int tx = blockIdx.x * blockDim.x + threadIdx.x;\n";
     code += "int ty = blockIdx.y * blockDim.y + threadIdx.y;\n";
     return code;
@@ -344,7 +357,7 @@ std::string Kernel::generate_body(Context* ctx)
     std::string code = "";
     for (auto& node : nodes)
     {
-        code += fmt::format("\n{{\n{}\n{}\n}}\n", node->generate_code(ctx), generate_debug(ctx));
+        code += fmt::format("\n{{\n{}\n}}\n", node->generate_code(ctx));
     }
     return code;
 }
@@ -352,9 +365,9 @@ std::string Kernel::generate_body(Context* ctx)
 std::string Kernel::generate_debug(Context* ctx)
 {
     //std::string code = "if(tx == 0 && ty == 0) printf(\"Kernel called\");\n";
-    std::string code = "printf(\"%%i, %%i, %%i, %%i\\n\", IDX2D((s_idy + 0) * 1, (s_idx + -1) * 1, stride_0), IDX2D((s_idy + 0) * 1, (s_idx + 1) * 1, stride_0), IDX2D((s_idy + -1) * 1, (s_idx + 0) * 1, stride_0), IDX2D((s_idy + 1) * 1, (s_idx + 0) * 1, stride_0));\n";
-    return code;
-    //return "";
+    //std::string code = "printf(\"%%i, %%i, %%i, %%i\\n\", IDX2D((s_idy + 0) * 1, (s_idx + -1) * 1, stride_0), IDX2D((s_idy + 0) * 1, (s_idx + 1) * 1, stride_0), IDX2D((s_idy + -1) * 1, (s_idx + 0) * 1, stride_0), IDX2D((s_idy + 1) * 1, (s_idx + 0) * 1, stride_0));\n";
+    //return code;
+    return "";
 }
 
 std::string Kernel::generate_arguments(Context* ctx)
@@ -385,10 +398,11 @@ std::string Kernel::generate_code(Context* ctx)
 {
     ctx->set_active_kernel(this);
     std::string body = generate_body(ctx);
-    std::string code = fmt::format("{}\n{{\n{}\n{}\n{}\n{}\n}}", 
+    std::string code = fmt::format("{}\n{{\n{}\n{}\n{}\n{}\n{}\n}}", 
         generate_signature(ctx), 
         generate_variable_declarations(ctx),
         generate_shared_memory_declarations(ctx),
+        generate_debug(ctx),
         generate_shared_memory_population(ctx),
         body);
     ctx->reset_active_kernel();
