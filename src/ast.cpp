@@ -70,8 +70,7 @@ void Context::register_access(Slice& slice)
     if (active_kernel)
     {
         active_kernel->ghost_info[get_active()] = std::max(active_kernel->ghost_info[get_active()], offset);
-        if (active_kernel->mem_access_info[get_active()].find(slice) == active_kernel->mem_access_info[get_active()].end())
-            active_kernel->mem_access_info[get_active()].insert(slice);
+        active_kernel->mem_access_info[get_active()].insert(slice);
     }
 }
 
@@ -353,9 +352,9 @@ std::string Kernel::generate_body(Context* ctx)
 std::string Kernel::generate_debug(Context* ctx)
 {
     //std::string code = "if(tx == 0 && ty == 0) printf(\"Kernel called\");\n";
-    //std::string code = "printf(\"%%i, %%i, %%i, %%i\\n\", IDX2D((s_idy + 0) * 1, (s_idx + -1) * 1, stride_0), IDX2D((s_idy + 0) * 1, (s_idx + 1) * 1, stride_0), IDX2D((s_idy + -1) * 1, (s_idx + 0) * 1, stride_0), IDX2D((s_idy + 1) * 1, (s_idx + 0) * 1, stride_0));\n";
-    //return code;
-    return "";
+    std::string code = "printf(\"%%i, %%i, %%i, %%i\\n\", IDX2D((s_idy + 0) * 1, (s_idx + -1) * 1, stride_0), IDX2D((s_idy + 0) * 1, (s_idx + 1) * 1, stride_0), IDX2D((s_idy + -1) * 1, (s_idx + 0) * 1, stride_0), IDX2D((s_idy + 1) * 1, (s_idx + 0) * 1, stride_0));\n";
+    return code;
+    //return "";
 }
 
 std::string Kernel::generate_arguments(Context* ctx)

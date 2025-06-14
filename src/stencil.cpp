@@ -291,8 +291,8 @@ bool Stencil::traverse_dag(DAGNode* node)
         {
             // if the dependency is not done, return false
             dep->waiting.insert(node);
-            if (thisIndex.x == 0 && thisIndex.y == 0 && dep->node_id == 7)
-            DEBUG_PRINT("PE %i> Adding node %i to waiting list of %i\n", CkMyPe(), node->node_id, dep->node_id);
+            //if (thisIndex.x == 0 && thisIndex.y == 0 && dep->node_id == 7)
+            //DEBUG_PRINT("PE %i> Adding node %i to waiting list of %i\n", CkMyPe(), node->node_id, dep->node_id);
             dep_done = false;
         }
     }
@@ -561,6 +561,8 @@ void Stencil::execute_kernel(KernelDAGNode* node)
         Array* array = arrays[input];
         args.push_back(&(array->data));
         args.push_back(&(array->strides[0]));
+        DEBUG_PRINT("Chare (%i, %i)> Arg %i: array %i, strides = (%i, %i)\n",
+            index[0], index[1], i, input, array->strides[0], array->strides[1]);
     }
 
     std::vector<Slice*> bounds;
