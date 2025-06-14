@@ -308,7 +308,7 @@ bool Stencil::traverse_dag(DAGNode *node)
 
     for (int i = 0; i < kernel_node->inputs.size(); i++)
     {
-        int ghost_depth = arrays[kernel_node->inputs[i]]->ghost_depth;
+        int ghost_depth = ghost_info[kernel_node->inputs[i]];
         if (ghost_depth > 0)
         {
             ghost_exchange_needed = true;
@@ -321,7 +321,8 @@ bool Stencil::traverse_dag(DAGNode *node)
         DEBUG_PRINT("(%i, %i)> Send ghosts called for %i\n", thisIndex.x, thisIndex.y, kernel_node->node_id);
         send_ghost_data(kernel_node);
     }
-    else{
+    else
+    {
         DEBUG_PRINT("(%i, %i)> Execute Kernel called for %i\n", thisIndex.x, thisIndex.y, kernel_node->node_id);
         execute_kernel(kernel_node);
     }
