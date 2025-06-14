@@ -1,9 +1,11 @@
-CHARMDIR=/home/aditya/charm/
-CHARMC=$(CHARMDIR)/mpi-linux-x86_64-cuda/bin/charmc
+CHARMDIR=/home/dhruvsjain614/Summer_Research_2025/charm-8.0.0
+CHARMC=$(CHARMDIR)/netlrts-linux-x86_64-smp/bin/charmc
 CHARM_INC=-I$(CHARMDIR)/include
+CUDA_INC=-I/usr/lib/cuda/include
+HAPI_INC=-I$(CHARMDIR)/src/arch/cuda/hybridAPI
 NVCC=nvcc
-NVCC_FLAGS=-c -std=c++17  -use_fast_math -O3 -I/home1/08450/tg877491/vcpkg/installed/arm64-linux/include
-OPTS=-c++-option -std=c++17 -O3 -g -ldl -I/home1/08450/tg877491/vcpkg/installed/arm64-linux/include -DNDEBUG
+NVCC_FLAGS=-c -std=c++17  -use_fast_math -O3 $(CUDA_INC) $(HAPI_INC)
+OPTS=-c++-option -std=c++17 -O3 -g -ldl $(CUDA_INC) $(HAPI_INC) -DNDEBUG
 LD_LIBS=-lcuda
 
 all: server.out
