@@ -53,7 +53,7 @@ public:
     {}
 };
 
-std::vector<DAGNode*> build_dag(char* &cmd, std::unordered_map<int, DAGNode*>& node_cache, 
-    std::unordered_map<int, int> &ghost_info);
+std::vector<DAGNode*> build_dag(char* &cmd, std::unordered_map<int, DAGNode*>& node_cache,
+    std::unordered_map<int, Kernel*> &kernels, std::unordered_map<int, int> &ghost_info);
 
 #endif // DAG_HPP
