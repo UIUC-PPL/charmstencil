@@ -308,7 +308,7 @@ bool Stencil::traverse_dag(DAGNode *node)
 
     for (int i = 0; i < kernel_node->inputs.size(); i++)
     {
-        int ghost_depth = ghost_info[kernel_node->inputs[i]];
+        int ghost_depth = ghost_info[i];
         if (ghost_depth > 0)
         {
             ghost_exchange_needed = true;
