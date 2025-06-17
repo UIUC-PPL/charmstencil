@@ -192,7 +192,7 @@ void Stencil::gather(int name)
     //     printf("%f ", data[i]);
     // }
     // printf("\n");
-    codegen_proxy[0].gather(name, index[0], index[1], array->local_shape[1], array->local_shape[0] ,num_chares[0], array->total_local_size, local_data, array->shape_original);
+    codegen_proxy[0].gather(name, index[1], index[0], array->local_shape[1], array->local_shape[0] ,num_chares[0], array->total_local_size, local_data, array->shape_original);
     delete[] data;
     delete[] local_data;
 }
@@ -661,6 +661,6 @@ void Stencil::create_array(int name, std::vector<int> shape)
         }
         local_shape.push_back(local_dim);
     }
-    arrays[name] = new Array(name, local_shape, shape, ghost_depth, boundary, shape[0]);
+    arrays[name] = new Array(name, local_shape, shape, ghost_depth, boundary, shape[0], num_chares[0]);
     invoke_init_array(arrays[name]->data, arrays[name]->total_size, compute_stream);
 }

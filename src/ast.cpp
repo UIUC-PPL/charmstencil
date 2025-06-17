@@ -224,10 +224,19 @@ Slice Kernel::get_launch_bounds(int name, Array* array, int* chare_index)
     // now find what indices of the global bound belong to this chare
     // FIXME assumption all arrays are square
 
-    int chare_startx = chare_index[0] * array->local_shape[0];
-    int chare_stopx = (chare_index[0] + 1) * array->local_shape[0];
-    int chare_starty = chare_index[1] * array->local_shape[1];
-    int chare_stopy = (chare_index[1] + 1) * array->local_shape[1];
+    int base_nums = array->shape_original/array->num_chares;
+    int remainder_nums = array->shape_original % array->num_chares;
+    int majority_x = std::min(remainder_nums,chare_index[1]);
+    int majority_y = std::min(remainder_nums,chare_index[0]);
+    int chare_startx = (base_nums+1)*majority_x + (chare_index[1]-majority_x)*base_nums;
+    int chare_stopx = chare_startx + array->local_shape[1];
+    int chare_starty = (base_nums+1)*majority_y + (chare_index[0]-majority_y)*base_nums;
+    int chare_stopy = chare_starty + array->local_shape[0];
+
+    // int chare_startx = chare_index[0] * array->local_shape[0];
+    // int chare_stopx = (chare_index[0] + 1) * array->local_shape[0];
+    // int chare_starty = chare_index[1] * array->local_shape[1];
+    // int chare_stopy = (chare_index[1] + 1) * array->local_shape[1];
 
     //DEBUG_PRINT("DEBUG AST> (%i, %i) > (%i, %i) > (%i, %i)\n", chare_index[0], chare_index[1], chare_startx, chare_stopx, chare_starty, chare_stopy);
 
