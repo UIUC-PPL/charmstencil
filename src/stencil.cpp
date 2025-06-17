@@ -56,16 +56,21 @@ void CodeGenCache::operation_done(double start)
     // CkExit();
 }
 
-void CodeGenCache::gather(int name, int index_x, int index_y, int local_dim, int num_chares, int data_size, float *data)
+void CodeGenCache::gather(int name, int index_x, int index_y, int local_dim_x, int local_dim_y, int num_chares, int data_size, float *data, int shape_original)
 {
-    int total_dim = num_chares * local_dim;
+    int total_dim = shape_original;
 
     // gather data from all sources
-    int start_x = index_x * local_dim;
-    int start_y = index_y * local_dim;
+    int base_nums = shape_original/num_chares;
+    int remainder_nums = shape_original % num_chares;
+    int majority_x = std::min(remainder_nums, index_x);
+    int majority_y = std::min(remainder_nums, index_y);
 
-    int stop_x = start_x + local_dim;
-    int stop_y = start_y + local_dim;
+    int start_x = (base_nums+1)*majority_x + (index_x-majority_x)*base_nums;
+    int start_y = (base_nums+1)*majority_y + (index_y-majority_y)*base_nums;
+
+    int stop_x = start_x + local_dim_x;
+    int stop_y = start_y + local_dim_y;
 
     // DEBUG_PRINT("DEBUG> (%i, %i) > (%i, %i) > (%i, %i)\n", index_x, index_y, start_x, stop_x, start_y, stop_y);
 
@@ -76,10 +81,10 @@ void CodeGenCache::gather(int name, int index_x, int index_y, int local_dim, int
         all_data = (float *)malloc(sizeof(float) * total_dim * total_dim);
 
         // copy data to all_data
-        for (int j = 0; j < local_dim; j++)
-            for (int i = 0; i < local_dim; i++)
+        for (int j = 0; j < local_dim_y; j++)
+            for (int i = 0; i < local_dim_x; i++)
             {
-                int local_index = j * local_dim + i;
+                int local_index = j * local_dim_x + i;
                 int global_index = (j + start_y) * total_dim + (i + start_x);
                 all_data[global_index] = data[local_index];
             }
@@ -91,10 +96,10 @@ void CodeGenCache::gather(int name, int index_x, int index_y, int local_dim, int
         all_data = it->second.second;
 
         // copy data to all_data
-        for (int j = 0; j < local_dim; j++)
-            for (int i = 0; i < local_dim; i++)
+        for (int j = 0; j < local_dim_y; j++)
+            for (int i = 0; i < local_dim_x; i++)
             {
-                int local_index = j * local_dim + i;
+                int local_index = j * local_dim_x + i;
                 int global_index = (j + start_y) * total_dim + (i + start_x);
                 all_data[global_index] = data[local_index];
             }
@@ -187,7 +192,7 @@ void Stencil::gather(int name)
     //     printf("%f ", data[i]);
     // }
     // printf("\n");
-    codegen_proxy[0].gather(name, index[0], index[1], array->local_shape[0], num_chares[0], array->total_local_size, local_data);
+    codegen_proxy[0].gather(name, index[0], index[1], array->local_shape[1], array->local_shape[0] ,num_chares[0], array->total_local_size, local_data, array->shape_original);
     delete[] data;
     delete[] local_data;
 }
@@ -321,8 +326,7 @@ bool Stencil::traverse_dag(DAGNode *node)
         DEBUG_PRINT("(%i, %i)> Send ghosts called for %i\n", thisIndex.x, thisIndex.y, kernel_node->node_id);
         send_ghost_data(kernel_node);
     }
-    else
-    {
+    else{
         DEBUG_PRINT("(%i, %i)> Execute Kernel called for %i\n", thisIndex.x, thisIndex.y, kernel_node->node_id);
         execute_kernel(kernel_node);
     }
@@ -334,6 +338,7 @@ void Stencil::receive_ghost_data(int node_id, int name, int dir, int &size, floa
 {
     Array *array = arrays[name];
     // if (thisIndex.x == 0 && thisIndex.y == 0)
+    ckout<<thisIndex.x<<" "<<thisIndex.y<<" Receiving "<<size<<" From Direction "<<dir<<endl;
     DEBUG_PRINT("(%i, %i)> Post %i receiving ghost data for array %i in dir %i, ptr = %p\n",
                 thisIndex.x, thisIndex.y, node_id, name, dir, array->recv_ghost_buffers[dir]);
     buf = array->recv_ghost_buffers[dir];
@@ -347,6 +352,7 @@ void Stencil::receive_ghost_data(int node_id, int name, int dir, int size, float
     // call unpacking kernel
 
     // if (thisIndex.x == 0 && thisIndex.y == 0)
+    ckout<<thisIndex.x<<" "<<thisIndex.y<<" Receiving "<<size<<" from direction "<<dir<<endl;
     DEBUG_PRINT("(%i, %i)> Receiving ghost data for %i array %i in dir %i, ptr = %p, %p\n",
                 thisIndex.x, thisIndex.y, node_id, name, dir, array->recv_ghost_buffers[dir], buf);
 
@@ -359,7 +365,7 @@ void Stencil::receive_ghost_data(int node_id, int name, int dir, int size, float
         int starty = array->local_shape[0] + array->ghost_depth;
         int stopy = starty + array->ghost_depth;
         invoke_ns_unpacking_kernel(array->data, array->recv_ghost_buffers[dir], array->ghost_depth,
-                                   startx, stopx, starty, stopy, array->strides[0], array->local_shape[0],
+                                   startx, stopx, starty, stopy, array->strides[0], array->local_shape[1],
                                    comm_stream);
         break;
     }
@@ -371,7 +377,7 @@ void Stencil::receive_ghost_data(int node_id, int name, int dir, int size, float
         int starty = 0;
         int stopy = array->ghost_depth;
         invoke_ns_unpacking_kernel(array->data, array->recv_ghost_buffers[dir], array->ghost_depth,
-                                   startx, stopx, starty, stopy, array->strides[0], array->local_shape[0],
+                                   startx, stopx, starty, stopy, array->strides[0], array->local_shape[1],
                                    comm_stream);
         break;
     }
@@ -490,12 +496,13 @@ void Stencil::send_ghost_data(KernelDAGNode *node)
                 int starty = array->local_shape[0];
                 int stopy = starty + array->ghost_depth;
                 invoke_ns_packing_kernel(array->data, array->send_ghost_buffers[NORTH], array->ghost_depth,
-                                         startx, stopx, starty, stopy, array->strides[0], array->local_shape[0],
+                                         startx, stopx, starty, stopy, array->strides[0], array->local_shape[1],
                                          comm_stream);
                 // send ghost to north chare
                 // if (thisIndex.x == 0 && thisIndex.y == 0)
                 // DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, NORTH);
-                thisProxy(thisIndex.x, thisIndex.y + 1).receive_ghost_data(node->node_id, input, SOUTH, array->ghost_size, CkDeviceBuffer(array->send_ghost_buffers[NORTH], comm_stream));
+                ckout<<thisIndex.x<<" "<<thisIndex.y<<" Sending "<<array->ghost_size[1]<<" to "<<thisIndex.x<<" "<<thisIndex.y + 1<<endl;
+                thisProxy(thisIndex.x, thisIndex.y + 1).receive_ghost_data(node->node_id, input, SOUTH, array->ghost_size[1], CkDeviceBuffer(array->send_ghost_buffers[NORTH], comm_stream));
             }
 
             if (!boundary[SOUTH])
@@ -505,12 +512,13 @@ void Stencil::send_ghost_data(KernelDAGNode *node)
                 int starty = array->ghost_depth;
                 int stopy = starty + array->ghost_depth;
                 invoke_ns_packing_kernel(array->data, array->send_ghost_buffers[SOUTH], array->ghost_depth,
-                                         startx, stopx, starty, stopy, array->strides[0], array->local_shape[0],
+                                         startx, stopx, starty, stopy, array->strides[0], array->local_shape[1],
                                          comm_stream);
                 // send ghost to south chare
                 // if (thisIndex.x == 0 && thisIndex.y == 0)
                 // DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, SOUTH);
-                thisProxy(thisIndex.x, thisIndex.y - 1).receive_ghost_data(node->node_id, input, NORTH, array->ghost_size, CkDeviceBuffer(array->send_ghost_buffers[SOUTH], comm_stream));
+                ckout<<thisIndex.x<<" "<<thisIndex.y<<" Sending "<<array->ghost_size[1]<<" to "<<thisIndex.x<<" "<<thisIndex.y - 1<<endl;
+                thisProxy(thisIndex.x, thisIndex.y - 1).receive_ghost_data(node->node_id, input, NORTH, array->ghost_size[1], CkDeviceBuffer(array->send_ghost_buffers[SOUTH], comm_stream));
             }
 
             if (!boundary[EAST])
@@ -525,7 +533,8 @@ void Stencil::send_ghost_data(KernelDAGNode *node)
                 // send ghost to east chare
                 // if (thisIndex.x == 0 && thisIndex.y == 0)
                 // DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, EAST);
-                thisProxy(thisIndex.x + 1, thisIndex.y).receive_ghost_data(node->node_id, input, WEST, array->ghost_size, CkDeviceBuffer(array->send_ghost_buffers[EAST], comm_stream));
+                ckout<<thisIndex.x<<" "<<thisIndex.y<<" Sending "<<array->ghost_size[0]<<" to "<<thisIndex.x + 1<<" "<<thisIndex.y<<endl;
+                thisProxy(thisIndex.x + 1, thisIndex.y).receive_ghost_data(node->node_id, input, WEST, array->ghost_size[0], CkDeviceBuffer(array->send_ghost_buffers[EAST], comm_stream));
             }
 
             if (!boundary[WEST])
@@ -540,7 +549,8 @@ void Stencil::send_ghost_data(KernelDAGNode *node)
                 // send ghost to west chare
                 // if (thisIndex.x == 0 && thisIndex.y == 0)
                 // DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, WEST);
-                thisProxy(thisIndex.x - 1, thisIndex.y).receive_ghost_data(node->node_id, input, EAST, array->ghost_size, CkDeviceBuffer(array->send_ghost_buffers[WEST], comm_stream));
+                ckout<<thisIndex.x<<" "<<thisIndex.y<<" Sending "<<array->ghost_size[0]<<" to "<<thisIndex.x - 1<<" "<<thisIndex.y<<endl;
+                thisProxy(thisIndex.x - 1, thisIndex.y).receive_ghost_data(node->node_id, input, EAST, array->ghost_size[0], CkDeviceBuffer(array->send_ghost_buffers[WEST], comm_stream));
             }
         }
     }
@@ -645,8 +655,12 @@ void Stencil::create_array(int name, std::vector<int> shape)
     for (int i = 0; i < 2; i++)
     {
         int local_dim = shape[i] / num_chares[i];
+        int remainder = shape[i] % num_chares[i];
+        if(index[i] < remainder){
+            local_dim++;
+        }
         local_shape.push_back(local_dim);
     }
-    arrays[name] = new Array(name, local_shape, shape, ghost_depth, boundary);
+    arrays[name] = new Array(name, local_shape, shape, ghost_depth, boundary, shape[0]);
     invoke_init_array(arrays[name]->data, arrays[name]->total_size, compute_stream);
 }

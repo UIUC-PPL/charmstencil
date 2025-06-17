@@ -101,7 +101,7 @@ public:
 
     void operation_done(double start);
 
-    void gather(int name, int index_x, int index_y, int local_dim, int num_chares, int data_size, float* data);
+    void gather(int name, int index_x, int index_y, int local_dim_x, int local_dim_y, int num_chares, int data_size, float* data, int shape_original);
 };
 
 

@@ -20,11 +20,12 @@ public:
     std::vector<int> strides;
 
     bool exchange_in_progress;
-    int ghost_size;
+    std::vector<int> ghost_size;
     float* send_ghost_buffers[4];
     float* recv_ghost_buffers[4];
+    int shape_original;
 
-    Array(int name_, std::vector<int> shape_, std::vector<int> global_shape_, int ghost_depth_, bool* boundary)
+    Array(int name_, std::vector<int> shape_, std::vector<int> global_shape_, int ghost_depth_, bool* boundary, int shape_original_)
         : name(name_)
         , local_shape(shape_)
         , global_shape(global_shape_)
@@ -32,6 +33,7 @@ public:
         , generation(0)
         , ghost_generation(-1)
         , exchange_in_progress(false)
+        , shape_original(shape_original_)
     {
         for(int i = 0; i < shape_.size(); i++)
             shape.push_back(shape_[i] + 2 * ghost_depth_);
@@ -42,7 +44,9 @@ public:
         total_size = shape[0] * shape[1];
         total_local_size = local_shape[0] * local_shape[1];
         hapiCheck(cudaMalloc((void**) &data, sizeof(float) * total_size));
-        ghost_size = ghost_depth * local_shape[0]; // FIXME assuming square array
+        ghost_size.resize(shape.size());
+        ghost_size[0] = ghost_depth * local_shape[1]; // FIXME assuming square array
+        ghost_size[1] = ghost_depth * local_shape[0];
         allocate_ghost_buffers(boundary);
     }
 
@@ -57,9 +61,10 @@ public:
         {
             if (!boundary[i])
             {
+                int idx_ghost_size = i/2 ;
                 DEBUG_PRINT("PE %i> Allocating ghost buffers for array %i in dir %i\n", CkMyPe(), name, i);
-                hapiCheck(cudaMalloc((void**) &(send_ghost_buffers[i]), sizeof(float) * ghost_size));
-                hapiCheck(cudaMalloc((void**) &(recv_ghost_buffers[i]), sizeof(float) * ghost_size));
+                hapiCheck(cudaMalloc((void**) &(send_ghost_buffers[i]), sizeof(float) * ghost_size[idx_ghost_size]));
+                hapiCheck(cudaMalloc((void**) &(recv_ghost_buffers[i]), sizeof(float) * ghost_size[idx_ghost_size]));
                 DEBUG_PRINT("PE %i> Send ghost buffer %i: %p\n", CkMyPe(), i, send_ghost_buffers[i]);
                 DEBUG_PRINT("PE %i> Recv ghost buffer %i: %p\n", CkMyPe(), i, recv_ghost_buffers[i]);
             }
