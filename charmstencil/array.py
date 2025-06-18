@@ -1,5 +1,6 @@
-from charmstencil.kernel import get_active_kernel_graph
+from charmstencil.kernel import get_active_kernel_graph, get_kernel_graph_set
 from charmstencil.dag import get_active_dag, ArrayDAGNode
+from charmstencil.ast import KernelGraph, KernelParameter, ParamOperationNode, get_parameter_state
 
 next_name = 0
 
@@ -26,29 +27,81 @@ class Array(object):
         # that wrote to this array
         self.dag_node = ArrayDAGNode(self.name, self)
         self.base_node = self.dag_node
+        self.kernel_param = None
         get_active_dag().add_node(self.dag_node)
         # TODO get ghost data from kwargs
 
+    def reset_kernel_parameter(self):
+        """
+        Reset the kernel parameter for this array.
+        """
+        self.kernel_param = None
+
+    def get_kernel_parameter(self):
+        """
+        Get the kernel parameter for this array.
+        If it does not exist, create it.
+        """
+        if self.kernel_param is None:
+            self.kernel_param = KernelParameter()
+            get_parameter_state().add_array(self)
+        return self.kernel_param
+
+    def binop(self, op, other):
+        if isinstance(other, Array):
+            node = ParamOperationNode(op, [self.get_kernel_parameter(),
+                                           other.get_kernel_parameter()])
+            return KernelParameter(index=self.kernel_param.index, graph=node)
+        elif isinstance(other, KernelParameter):
+            node = ParamOperationNode(op, [self.get_kernel_parameter(),
+                                           other.get_kernel_parameter()])
+            return KernelParameter(index=self.kernel_param.index, graph=node)
+        else:
+            node = ParamOperationNode(op, [self.get_kernel_parameter(),
+                                           ParamOperationNode('noop', [other.get_kernel_parameter()])])
+            return KernelParameter(index=self.kernel_param.index, graph=node)
+
     def __getitem__(self, key):
-        raise RuntimeError('This operation outside of a kernel is not allowed')
+        node = ParamOperationNode('getitem', [ParamOperationNode('noop', [self.get_kernel_parameter()]), 
+                                              ParamOperationNode('noop', [key])])
+        return KernelParameter(index=self.kernel_param.index, slice_key=key, graph=node)
 
     def __setitem__(self, key, value):
-        raise RuntimeError('This operation outside of a kernel is not allowed')
+        if isinstance(value, KernelParameter):
+            value_node = value.graph
+        elif isinstance(value, float) or isinstance(value, int):
+            value_node = ParamOperationNode('noop', [value])
+        else:
+            raise TypeError('Value must be an array slice, int, or float')
+        node = ParamOperationNode('setitem', [ParamOperationNode('noop', [self.get_kernel_parameter()]), 
+                                              ParamOperationNode('noop', [key]), 
+                                              value_node])
+        active_graph = get_active_kernel_graph()
+  
+        active_graph.insert(node)
+        active_graph.add_output(self.get_kernel_parameter())
+        # FIXME check if this works
+
+        # now reset kernel parameter for me and everyone in the value
+        get_kernel_graph_set().add_graph(active_graph)
 
     def __add__(self, other):
-        raise RuntimeError('This operation outside of a kernel is not allowed')
+        return self.binop('+', other)
+    
+    def __radd__(self, other):
+        return self.binop('+', other)
 
     def __sub__(self, other):
-        raise RuntimeError('This operation outside of a kernel is not allowed')
+        return self.binop('-', other)
 
     def __mul__(self, other):
-        raise RuntimeError('This operation outside of a kernel is not allowed')
+        return self.binop('*', other)
 
     def __rmul__(self, other):
-        raise RuntimeError('This operation outside of a kernel is not allowed')
+        return self.binop('*', other)
 
     def __div__(self, other):
-        raise RuntimeError('This operation outside of a kernel is not allowed')
+        return self.binop('/', other)
 
     def get(self, interface):
         return interface.get(self.name)

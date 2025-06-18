@@ -1,13 +1,59 @@
-from charmstencil.ast import KernelGraph, KernelParameter
-from charmstencil.dag import get_active_dag, KernelDAGNode
+from charmstencil.ast import KernelGraph, KernelParameter, get_next_kernel_id, get_parameter_state
+from charmstencil.dag import get_active_dag, get_gid, KernelDAGNode
 
-kernel_graphs = {}
+
+class KernelGraphSet(object):
+    def __init__(self):
+        self.graphs = {}
+        self.identifiers = {}
+
+    def add_graph(self, graph):
+        from charmstencil.array import Array
+        if not isinstance(graph, KernelGraph):
+            raise ValueError('Graph must be a KernelGraph')
+        graph.args = [array.get_kernel_parameter() for array in get_parameter_state().arrays]
+        if graph.identifier not in self.identifiers:
+            self.identifiers[graph.identifier] = graph
+            graph.kernel_id = get_next_kernel_id()
+            self.graphs[graph.kernel_id] = graph
+        else:
+            graph.kernel_id = self.identifiers[graph.identifier].kernel_id
+
+        dag = get_active_dag()
+        kernel_node = KernelDAGNode(f"knl{graph.kernel_id}", graph.kernel_id,
+                                    get_parameter_state().arrays)
+        dag.add_node(kernel_node)
+
+        # inputs are the Array objects
+        for inp in get_parameter_state().arrays:
+            if isinstance(inp, Array):
+                dag.add_edge(inp.dag_node, kernel_node)
+
+        outputs = graph.get_outputs(get_parameter_state().arrays)
+        for out in outputs:
+            out.inc_generation(kernel_node)
+        
+        get_parameter_state().reset()
+        reset_active_kernel_graph()
+        
+    def get_graph(self, knl_id):
+        if knl_id not in self.graphs:
+            raise ValueError(f'Kernel graph {knl_id} not found')
+        return self.graphs[knl_id]
+    
+
+kernel_graphs = KernelGraphSet()
 active_graph = None
+
+def get_kernel_graph_set():
+    """Get the kernel graph set."""
+    global kernel_graphs
+    return kernel_graphs
 
 def get_kernel_graphs():
     """Get the kernel graphs."""
     global kernel_graphs
-    return kernel_graphs
+    return kernel_graphs.graphs
 
 def get_kernel_graph(name):
     """Get the kernel graph by name."""
@@ -20,65 +66,17 @@ def get_active_kernel_graph():
     """Get the active kernel graph."""
     global active_graph
     if active_graph is None:
-        raise ValueError('No active kernel graph')
+        active_graph = KernelGraph()
     return active_graph
 
-def capture_kernel_graph(f, args):
-    """Capture the kernel graph from the function."""
-    from charmstencil.array import Array
+def reset_active_kernel_graph():
+    """Set the active kernel graph."""
     global active_graph
-    active_graph = KernelGraph(f.__name__)
-    active_graph.args = []
-    idx = 0
-    func_args = []
-    for arg in args:
-        if isinstance(arg, Array):
-            param = KernelParameter(idx)
-            active_graph.args.append(param)
-            func_args.append(param)
-            idx += 1
-        else:
-            func_args.append(arg)
-    f(*func_args)
-    kernel_graphs[f.__name__] = active_graph
     active_graph = None
-
-def kernel(f):
-    """Decorator to mark a function as a kernel."""
-    from charmstencil.array import Array
-    f.is_kernel = True
-    
-    def wrapper(*args):
-        # make a new graph for each kernel
-        global kernel_graphs
-        global active_graph
-        if f.__name__ not in kernel_graphs:
-            capture_kernel_graph(f, args)
-        active_graph = kernel_graphs[f.__name__]
-        outputs = active_graph.get_outputs(args)
-        # now find the inputs and outputs and add call to the DAG
-        dag = get_active_dag()
-        array_args = []
-        for arg in args:
-            if isinstance(arg, Array):
-                array_args.append(arg)
-        kernel_node = KernelDAGNode(f.__name__, active_graph.kernel_id,
-                                    array_args)
-        dag.add_node(kernel_node)
-        # inputs are the Array objects
-        for inp in args:
-            if isinstance(inp, Array):
-                dag.add_edge(inp.dag_node, kernel_node)
-
-        for out in outputs:
-            out.inc_generation(kernel_node)
-
-        active_graph = None
-    return wrapper
 
 def plot_kernel_graphs():
     """Plot the kernel graph."""
     global kernel_graphs
 
-    for graph in kernel_graphs.values():
+    for graph in kernel_graphs.graphs.values():
         graph.plot()

@@ -49,9 +49,42 @@ def int_to_slice(i):
     return slice(i, i + 1, 1)
 
 
+class KernelParameterState(object):
+    def __init__(self):
+        self.param_index = 0
+        self.arrays = []
+
+    def add_array(self, arg):
+        if arg not in self.arrays:
+            self.arrays.append(arg)
+
+    def get_index(self):
+        print(f'Getting index {self.param_index} for array')
+        index = self.param_index
+        self.param_index += 1
+        return index
+    
+    def reset(self):
+        for array in self.arrays:
+            array.reset_kernel_parameter()
+        self.param_index = 0
+        self.arrays = []
+
+
+parameter_state = KernelParameterState()
+
+
+def get_parameter_state():
+    """Get the current parameter state."""
+    global parameter_state
+    return parameter_state
+
+
 class KernelParameter(object):
-    def __init__(self, index, **kwargs):
-        self.index = index
+    def __init__(self, **kwargs):
+        self.index = kwargs.pop('index', None)
+        if self.index is None:
+            self.index = get_parameter_state().get_index()
         self.slice_key = kwargs.pop('slice_key', None)
         self.graph = kwargs.pop('graph', ParamOperationNode('noop', [self]))
         self.generation = kwargs.pop('generation', 0)
@@ -64,43 +97,30 @@ class KernelParameter(object):
         from charmstencil.kernel import get_active_kernel_graph
         node = ParamOperationNode('getitem', [ParamOperationNode('noop', [self]), 
                                               ParamOperationNode('noop', [key])])
-        return KernelParameter(self.index, slice_key=key, graph=node)
+        return KernelParameter(index=self.index, slice_key=key, graph=node)
 
     def __setitem__(self, key, value):
-        from charmstencil.kernel import get_active_kernel_graph
-        if isinstance(value, KernelParameter):
-            value_node = value.graph
+        raise ValueError("Setting items in a view not allowed")
+
+    def binop(self, op, other):
+        if isinstance(other, KernelParameter):
+            other_node = other.graph
         else:
-            value_node = ParamOperationNode('noop', [value])
-        node = ParamOperationNode('setitem', [ParamOperationNode('noop', [self]), 
-                                              ParamOperationNode('noop', [key]), 
-                                              value_node])
-        get_active_kernel_graph().add_output(self)
-        get_active_kernel_graph().insert(node)
+            other_node = ParamOperationNode('noop', [other])
+        node = ParamOperationNode(op, [self.graph, other_node])
+        return KernelParameter(index=self.index, graph=node)
 
     def __add__(self, other):
-        if isinstance(other, KernelParameter):
-            other_node = other.graph
-        else:
-            other_node = ParamOperationNode('noop', [other])
-        node = ParamOperationNode('+', [self.graph, other_node])
-        return KernelParameter(self.index, graph=node)
+        return self.binop('+', other)
+    
+    def __radd__(self, other):
+        return self + other
 
     def __sub__(self, other):
-        if isinstance(other, KernelParameter):
-            other_node = other.graph
-        else:
-            other_node = ParamOperationNode('noop', [other])
-        node = ParamOperationNode('-', [self.graph, other_node])      
-        return KernelParameter(self.index, graph=node)
+        return self.binop('-', other)
 
     def __mul__(self, other):
-        if isinstance(other, KernelParameter):
-            other_node = other.graph
-        else:
-            other_node = ParamOperationNode('noop', [other])
-        node = ParamOperationNode('*', [self.graph, other_node])
-        return KernelParameter(self.index, graph=node)
+        return self.binop('*', other)
 
     def __rmul__(self, other):
         return self * other
@@ -196,14 +216,17 @@ class ParamOperationNode(object):
 
 
 class KernelGraph(object):
-    def __init__(self, name):
-        self.name = name
+    def __init__(self):
         self.graph = []
-        self.kernel_id = get_next_kernel_id()
+        #self.kernel_id = get_next_kernel_id()
+        self.kernel_id = None
         self.args = set()
         self.outputs = set()
+        self._identifier = None
 
     def get_outputs(self, args):
+        print(args)
+        print([o.index for o in self.outputs])
         return [args[output.index] for output in self.outputs]
 
     def is_empty(self):
@@ -215,9 +238,12 @@ class KernelGraph(object):
     def add_output(self, output):
         self.outputs.add(output)
 
-    def serialize(self):
+    @property
+    def identifier(self):
         #self.reindex()
-        cmd = to_bytes(self.kernel_id, 'i')
+        #cmd = to_bytes(self.kernel_id, 'i')
+        if self._identifier != None:
+            return self._identifier
 
         gcmd = to_bytes(len(self.args), 'i')
         gcmd += to_bytes(len(self.outputs), 'i')
@@ -227,8 +253,14 @@ class KernelGraph(object):
         for g in self.graph:
             gcmd += g.serialize()
         
-        cmd += to_bytes(len(gcmd), 'i')
+        cmd = to_bytes(len(gcmd), 'i')
         cmd += gcmd
+        self._identifier = cmd
+        return cmd
+    
+    def serialize(self):
+        cmd = to_bytes(self.kernel_id, 'i')
+        cmd += self.identifier
         return cmd
 
     def fill_plot(self, G, node_map={}, next_id=0, parent=None):
@@ -239,7 +271,7 @@ class KernelGraph(object):
 
     def plot(self):
         G = nx.Graph()
-        plt.title(f"Kernel Graph: {self.name}", loc='center')
+        plt.title(f"Kernel Graph: {self.kernel_id}", loc='center')
         node_map = {}
         next_id = 0
         self.fill_plot(G, node_map=node_map, next_id=next_id)
