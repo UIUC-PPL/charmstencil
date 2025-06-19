@@ -72,7 +72,7 @@ void CodeGenCache::gather(int name, int index_x, int index_y, int local_dim_x, i
     int stop_x = start_x + local_dim_x;
     int stop_y = start_y + local_dim_y;
 
-    // DEBUG_PRINT("DEBUG> (%i, %i) > (%i, %i) > (%i, %i)\n", index_x, index_y, start_x, stop_x, start_y, stop_y);
+    DEBUG_PRINT("DEBUG> (%i, %i) > (%i, %i) > (%i, %i)\n", index_x, index_y, start_x, stop_x, start_y, stop_y);
 
     auto it = gathered_arrays.find(name);
     float *all_data;
@@ -86,10 +86,12 @@ void CodeGenCache::gather(int name, int index_x, int index_y, int local_dim_x, i
             {
                 int local_index = j * local_dim_x + i;
                 int global_index = (j + start_y) * total_dim + (i + start_x);
+                ckout<<data[local_index]<<" ";
                 all_data[global_index] = data[local_index];
             }
 
         gathered_arrays[name] = std::make_pair(1, all_data);
+        ckout<<endl;
     }
     else
     {
@@ -101,10 +103,12 @@ void CodeGenCache::gather(int name, int index_x, int index_y, int local_dim_x, i
             {
                 int local_index = j * local_dim_x + i;
                 int global_index = (j + start_y) * total_dim + (i + start_x);
+                ckout<<data[local_index]<<" ";
                 all_data[global_index] = data[local_index];
             }
 
         it->second.first++;
+        ckout<<endl;
     }
 
     if (gathered_arrays[name].first == num_chares * num_chares)

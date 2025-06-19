@@ -241,19 +241,23 @@ Slice Kernel::get_launch_bounds(int name, Array* array, int* chare_index)
     //DEBUG_PRINT("DEBUG AST> (%i, %i) > (%i, %i) > (%i, %i)\n", chare_index[0], chare_index[1], chare_startx, chare_stopx, chare_starty, chare_stopy);
 
     Slice local_bounds;
-    local_bounds.index[0].start = std::max(global_bounds.index[0].start, chare_startx);
-    local_bounds.index[0].stop = std::max(std::min(global_bounds.index[0].stop, chare_stopx), local_bounds.index[0].start);
+    local_bounds.index[0].start = std::max(global_bounds.index[0].start, chare_starty);
+    local_bounds.index[0].stop = std::max(std::min(global_bounds.index[0].stop, chare_stopy), local_bounds.index[0].start);
     local_bounds.index[0].step = slice.index[0].step;
 
-    local_bounds.index[0].start += (array->ghost_depth - chare_startx);
-    local_bounds.index[0].stop += (array->ghost_depth - chare_startx);
+    local_bounds.index[0].start += (array->ghost_depth - chare_starty);
+    local_bounds.index[0].stop += (array->ghost_depth - chare_starty);
 
-    local_bounds.index[1].start = std::max(global_bounds.index[1].start, chare_starty);
-    local_bounds.index[1].stop = std::max(std::min(global_bounds.index[1].stop, chare_stopy), local_bounds.index[1].start);
+    local_bounds.index[1].start = std::max(global_bounds.index[1].start, chare_startx);
+    local_bounds.index[1].stop = std::max(std::min(global_bounds.index[1].stop, chare_stopx), local_bounds.index[1].start);
     local_bounds.index[1].step = slice.index[1].step;
 
-    local_bounds.index[1].start += (array->ghost_depth - chare_starty);
-    local_bounds.index[1].stop += (array->ghost_depth - chare_starty);
+    local_bounds.index[1].start += (array->ghost_depth - chare_startx);
+    local_bounds.index[1].stop += (array->ghost_depth - chare_startx);
+
+    std::swap(local_bounds.index[0].start, local_bounds.index[1].start);
+    std::swap(local_bounds.index[0].stop, local_bounds.index[1].stop);
+    std::swap(local_bounds.index[0].step, local_bounds.index[1].step);
 
     return local_bounds;
 }
