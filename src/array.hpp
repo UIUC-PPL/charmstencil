@@ -45,8 +45,8 @@ public:
         total_local_size = local_shape[0] * local_shape[1];
         hapiCheck(cudaMalloc((void**) &data, sizeof(float) * total_size));
         ghost_size.resize(shape.size());
-        ghost_size[0] = ghost_depth * local_shape[1]; // FIXME assuming square array
-        ghost_size[1] = ghost_depth * local_shape[0];
+        ghost_size[0] = ghost_depth * local_shape[0]; // FIXME assuming square array
+        ghost_size[1] = ghost_depth * local_shape[1];
         allocate_ghost_buffers(boundary);
     }
 

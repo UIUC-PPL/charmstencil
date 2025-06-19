@@ -213,12 +213,12 @@ Slice Kernel::get_launch_bounds(int name, Array* array, int* chare_index)
     Slice global_bounds;
     //DEBUG_PRINT("Calculating global_bounds on: (%i : %i), (%i : %i)\n", slice.index[0].start, slice.index[0].stop,
     //    slice.index[1].start, slice.index[1].stop);
-    global_bounds.index[0].start = GET_START(slice, array->global_shape, 0);
-    global_bounds.index[0].stop = GET_STOP(slice, array->global_shape, 0);
+    global_bounds.index[0].start = GET_START(slice, array->global_shape, 1);
+    global_bounds.index[0].stop = GET_STOP(slice, array->global_shape, 1);
     //int stepx = slice.index[0].step;
 
-    global_bounds.index[1].start = GET_START(slice, array->global_shape, 1);
-    global_bounds.index[1].stop = GET_STOP(slice, array->global_shape, 1);
+    global_bounds.index[1].start = GET_START(slice, array->global_shape, 0);
+    global_bounds.index[1].stop = GET_STOP(slice, array->global_shape, 0);
     //int stepy = slice.index[1].step;
 
     // now find what indices of the global bound belong to this chare
@@ -226,11 +226,11 @@ Slice Kernel::get_launch_bounds(int name, Array* array, int* chare_index)
 
     int base_nums = array->shape_original/array->num_chares;
     int remainder_nums = array->shape_original % array->num_chares;
-    int majority_x = std::min(remainder_nums,chare_index[1]);
-    int majority_y = std::min(remainder_nums,chare_index[0]);
-    int chare_startx = (base_nums+1)*majority_x + (chare_index[1]-majority_x)*base_nums;
+    int majority_x = std::min(remainder_nums,chare_index[0]);
+    int majority_y = std::min(remainder_nums,chare_index[1]);
+    int chare_startx = (base_nums+1)*majority_x + (chare_index[0]-majority_x)*base_nums;
     int chare_stopx = chare_startx + array->local_shape[1];
-    int chare_starty = (base_nums+1)*majority_y + (chare_index[0]-majority_y)*base_nums;
+    int chare_starty = (base_nums+1)*majority_y + (chare_index[1]-majority_y)*base_nums;
     int chare_stopy = chare_starty + array->local_shape[0];
 
     // int chare_startx = chare_index[0] * array->local_shape[0];
@@ -241,23 +241,23 @@ Slice Kernel::get_launch_bounds(int name, Array* array, int* chare_index)
     //DEBUG_PRINT("DEBUG AST> (%i, %i) > (%i, %i) > (%i, %i)\n", chare_index[0], chare_index[1], chare_startx, chare_stopx, chare_starty, chare_stopy);
 
     Slice local_bounds;
-    local_bounds.index[0].start = std::max(global_bounds.index[0].start, chare_starty);
-    local_bounds.index[0].stop = std::max(std::min(global_bounds.index[0].stop, chare_stopy), local_bounds.index[0].start);
+    local_bounds.index[0].start = std::max(global_bounds.index[0].start, chare_startx);
+    local_bounds.index[0].stop = std::max(std::min(global_bounds.index[0].stop, chare_stopx), local_bounds.index[0].start);
     local_bounds.index[0].step = slice.index[0].step;
 
-    local_bounds.index[0].start += (array->ghost_depth - chare_starty);
-    local_bounds.index[0].stop += (array->ghost_depth - chare_starty);
+    local_bounds.index[0].start += (array->ghost_depth - chare_startx);
+    local_bounds.index[0].stop += (array->ghost_depth - chare_startx);
 
-    local_bounds.index[1].start = std::max(global_bounds.index[1].start, chare_startx);
-    local_bounds.index[1].stop = std::max(std::min(global_bounds.index[1].stop, chare_stopx), local_bounds.index[1].start);
+    local_bounds.index[1].start = std::max(global_bounds.index[1].start, chare_starty);
+    local_bounds.index[1].stop = std::max(std::min(global_bounds.index[1].stop, chare_stopy), local_bounds.index[1].start);
     local_bounds.index[1].step = slice.index[1].step;
 
-    local_bounds.index[1].start += (array->ghost_depth - chare_startx);
-    local_bounds.index[1].stop += (array->ghost_depth - chare_startx);
+    local_bounds.index[1].start += (array->ghost_depth - chare_starty);
+    local_bounds.index[1].stop += (array->ghost_depth - chare_starty);
 
-    std::swap(local_bounds.index[0].start, local_bounds.index[1].start);
-    std::swap(local_bounds.index[0].stop, local_bounds.index[1].stop);
-    std::swap(local_bounds.index[0].step, local_bounds.index[1].step);
+    // std::swap(local_bounds.index[0].start, local_bounds.index[1].start);
+    // std::swap(local_bounds.index[0].stop, local_bounds.index[1].stop);
+    // std::swap(local_bounds.index[0].step, local_bounds.index[1].step);
 
     return local_bounds;
 }
