@@ -5,6 +5,16 @@ import charmstencil.array as array
 gid = 0
 fusion_enabled = True
 
+def is_fusion_enabled():
+    """
+    Checks if fusion of kernel nodes in the DAG is enabled.
+
+    Returns:
+        bool: True if fusion is enabled, False otherwise.
+    """
+    global fusion_enabled
+    return fusion_enabled
+
 def disable_fusion():
     """
     Disables fusion of kernel nodes in the DAG.
@@ -325,8 +335,10 @@ class DAG(object):
         self.all_nodes.remove(node)
         if node in self.leaf_nodes:
             self.leaf_nodes.remove(node)
+            self.leaf_nodes.add(new_node)
         if node in self.goal_nodes:
             self.goal_nodes.remove(node)
+            self.goal_nodes.add(new_node)
             
         self.all_nodes.add(new_node)
         # remove all edges to this node
@@ -447,6 +459,6 @@ def show_dag():
     Displays the DAG.
     """
     print("Plotting DAG")
-    if fusion_enabled:
+    if is_fusion_enabled():
         get_active_dag().fuse()
     get_active_dag().plot()

@@ -59,7 +59,6 @@ class KernelParameterState(object):
             self.arrays.append(arg)
 
     def get_index(self):
-        print(f'Getting index {self.param_index} for array')
         index = self.param_index
         self.param_index += 1
         return index
@@ -135,7 +134,6 @@ class ParamOperationNode(object):
     def __init__(self, operation, operands):
         self.opcode = OPCODES.get(operation)
         self.operands = operands
-        print(f'Creating ParamOperationNode with {operation} and operands {self.operands}')
 
     def serialize(self):
         cmd = to_bytes(self.opcode, 'B')
@@ -242,7 +240,7 @@ class KernelGraph(object):
         """
         Fuse another KernelGraph into this one.
         """
-        print(f"Fusing {self.kernel_id} with {other.kernel_id}")
+        #print(f"Fusing {self.kernel_id} with {other.kernel_id}")
         new_graph = KernelGraph()
         #new_graph.graph = self.graph + other.graph
         last_param_index = max([p.index for p in self.args]) if self.args else 0
