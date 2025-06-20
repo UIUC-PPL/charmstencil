@@ -13,7 +13,7 @@ def boundary(u):
     u[:, -1] = 1
 
 
-interface = CCSInterface('192.168.1.209', 1234, odf=4)
+#interface = CCSInterface('192.168.1.209', 1234, odf=4)
 
 n = int(sys.argv[1])
 
@@ -27,18 +27,18 @@ for i in range(10):
     u2[1:-1, 1:-1] = 0.25 * (u1[:-2, 1:-1] + u1[2:, 1:-1] + u1[1:-1, :-2] + u1[1:-1, 2:])
     u1, u2 = u2, u1
 
-interface.execute()
-#show_dag()
+#interface.execute()
+show_dag()
 #plot_kernel_graphs()
 #get_active_dag().clear()
 
-for i in range(100):
-    u2[1:-1, 1:-1] = 0.25 * (u1[:-2, 1:-1] + u1[2:, 1:-1] + u1[1:-1, :-2] + u1[1:-1, 2:])
-    u1, u2 = u2, u1
+#for i in range(100):
+#    u2[1:-1, 1:-1] = 0.25 * (u1[:-2, 1:-1] + u1[2:, 1:-1] + u1[1:-1, :-2] + u1[1:-1, 2:])
+#    u1, u2 = u2, u1
 
 #show_dag()
-interface.execute()
-interface.exit()
+#interface.execute()
+#interface.exit()
 
 # uhost = u1.get(interface)
 # print(uhost)

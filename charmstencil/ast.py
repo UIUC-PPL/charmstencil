@@ -87,7 +87,6 @@ class KernelParameter(object):
             self.index = get_parameter_state().get_index()
         self.slice_key = kwargs.pop('slice_key', None)
         self.graph = kwargs.pop('graph', ParamOperationNode('noop', [self]))
-        self.generation = kwargs.pop('generation', 0)
         # for a new array this dag node is the independent ArrayDAGNode
         # after this array is written to by a kernel, this is the KernelDAGNode
         # that wrote to this array
@@ -136,6 +135,7 @@ class ParamOperationNode(object):
     def __init__(self, operation, operands):
         self.opcode = OPCODES.get(operation)
         self.operands = operands
+        print(f'Creating ParamOperationNode with {operation} and operands {self.operands}')
 
     def serialize(self):
         cmd = to_bytes(self.opcode, 'B')
@@ -225,18 +225,37 @@ class KernelGraph(object):
         self._identifier = None
 
     def get_outputs(self, args):
-        print(args)
-        print([o.index for o in self.outputs])
+        #print(args)
+        #print([o.index for o in self.outputs])
         return [args[output.index] for output in self.outputs]
 
     def is_empty(self):
         return len(self.graph) == 0
 
     def insert(self, node):
-        self.graph.append(deepcopy(node))
+        self.graph.append(node)
 
     def add_output(self, output):
         self.outputs.add(output)
+
+    def fuse(self, other):
+        """
+        Fuse another KernelGraph into this one.
+        """
+        print(f"Fusing {self.kernel_id} with {other.kernel_id}")
+        new_graph = KernelGraph()
+        #new_graph.graph = self.graph + other.graph
+        last_param_index = max([p.index for p in self.args]) if self.args else 0
+        other_kernel = deepcopy(other)
+        #print(f"Last param index: {last_param_index}")
+        for p in other_kernel.args:
+            p.index += (last_param_index + 1)
+        new_graph.graph = self.graph + other_kernel.graph
+        new_graph.args = self.args.union(other_kernel.args)
+        new_graph.outputs = self.outputs.union(other_kernel.outputs)
+        #print(f"new graph operands = {new_graph.graph[0].operands[0].operands[0]}, {new_graph.graph[1].operands[0].operands[0]}")
+        #get_kernel_graph_set().add_graph(new_graph)
+        return new_graph
 
     @property
     def identifier(self):
@@ -247,7 +266,8 @@ class KernelGraph(object):
 
         gcmd = to_bytes(len(self.args), 'i')
         gcmd += to_bytes(len(self.outputs), 'i')
-        for out in self.outputs:
+        outputs = sorted(self.outputs, key=lambda x: x.index)
+        for out in outputs:
             gcmd += to_bytes(out.index, 'i')
         gcmd += to_bytes(len(self.graph), 'i')
         for g in self.graph:
