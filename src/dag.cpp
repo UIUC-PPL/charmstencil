@@ -58,14 +58,20 @@ std::vector<DAGNode*> build_dag(char* &cmd, std::unordered_map<int, DAGNode*>& n
     {
         int src = extract<int>(cmd);
         int dst = extract<int>(cmd);
+        if (node_cache[src] == nullptr)
+        {
+            DEBUG_PRINT("src %i, dst %i\n", src, dst);
+        }
         static_cast<KernelDAGNode*>(node_cache[dst])->dependencies.push_back(node_cache[src]);
     }
 
     int num_goals = extract<int>(cmd);
+    DEBUG_PRINT("Num goals: %i\n", num_goals);
     std::vector<DAGNode*> goals;
     for (int i = 0; i < num_goals; i++)
     {
         int goal_id = extract<int>(cmd);
+        DEBUG_PRINT("Goal ID: %i, node = %p\n", goal_id, node_cache[goal_id]);
         goals.push_back(node_cache[goal_id]);
     }
     return goals;

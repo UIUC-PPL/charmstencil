@@ -90,7 +90,9 @@ class CCSInterface(Interface):
         """
         Send the DAG and kernel graphs to backend for execution.
         """
-        from charmstencil.dag import get_active_dag
+        from charmstencil.dag import get_active_dag, is_fusion_enabled
+        if is_fusion_enabled():
+            get_active_dag().fuse()
         kernel_graphs = self.get_kernels_to_send()
         print(f"Sending {len(kernel_graphs)} kernel graphs to server")
         cmd = to_bytes(len(kernel_graphs), 'i')

@@ -1,42 +1,20 @@
-from charmstencil.kernel import kernel, plot_kernel_graphs
+from charmstencil.kernel import plot_kernel_graphs
 from charmstencil.array import create_array
-from charmstencil.dag import show_dag
+from charmstencil.dag import show_dag, disable_fusion, get_active_dag
 from charmstencil.interface import CCSInterface
 import numpy as np
 import sys
 
+#disable_fusion()
 
-# @kernel
-# def boundary1(u1, u2):
-#     u1[0, :] = 1
-#     u2[0, :] = 1
-
-# @kernel
-# def boundary2(u1, u2):
-#     u1[-1, :] = 1
-#     u2[-1, :] = 1
-
-# @kernel
-# def boundary3(u1, u2):
-#     u1[:, 0] = 1
-#     u2[:, 0] = 1
-
-# @kernel
-# def boundary4(u1, u2):
-#     u1[:, -1] = 1
-#     u2[:, -1] = 1
-
-@kernel
 def init1(u, v):
     u[:,:] = 1
     v[:,:] = 1
 
-@kernel
 def init2(u, v, dx, dy):
     u[int(0.5/dx):int(1/dx+1),int(0.5/dy):int(1/dy+1)] = 2
     v[int(0.5/dx):int(1/dx+1),int(0.5/dy):int(1/dy+1)] = 2
 
-@kernel
 def burgers(u1, u2, v1, v2, nu, dt, dx, dy):
     u2[1:-1,1:-1] = (u1[1:-1,1:-1] - 
                     dt / dx * u1[1:-1,1:-1] * (u1[1:-1,1:-1] - u1[0:-2,1:-1]) -
@@ -63,7 +41,7 @@ nu = 0.01
 sigma = 0.2
 dt = sigma * dx
 
-interface = CCSInterface('10.193.151.206', 1234, odf=1)
+interface = CCSInterface('192.168.2.104', 1234, odf=4)
 
 init1(u1, v1)
 init1(u2, v2)
@@ -75,6 +53,8 @@ for i in range(10):
   v1, v2 = v2, v1
 
 interface.execute()
+#show_dag()
+#get_active_dag().clear()
 
 for i in range(100):
   burgers(u1, u2, v1, v2, nu, dt, dx, dy)
@@ -83,8 +63,8 @@ for i in range(100):
 
 interface.execute()
 
-#plot_kernel_graphs()
 #show_dag()
+#plot_kernel_graphs()
 
 # uhost = u1.get(interface)
 # vhost = v1.get(interface)
