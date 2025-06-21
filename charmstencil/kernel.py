@@ -5,7 +5,7 @@ class KernelGraphSet(object):
         self.graphs = {}
         self.identifiers = {}
 
-    def add_graph(self, graph, inputs, output_shape=None):
+    def add_graph(self, graph):
         from charmstencil.array import Array
         if not isinstance(graph, KernelGraph):
             raise ValueError('Graph must be a KernelGraph')

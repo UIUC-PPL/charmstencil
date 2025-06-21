@@ -199,7 +199,7 @@ class KernelDAGNode(DAGNode):
         other_graph = kernel.get_kernel_graph_set().get_graph(other.kernel_id)
 
         fused_graph = self_graph.fuse(other_graph)
-        kernel.get_kernel_graph_set().add_graph(fused_graph, fused_inputs, output_shape=self.output_shape)
+        kernel.get_kernel_graph_set().add_graph(fused_graph)
 
         # create a new node
         new_node = KernelDAGNode(
@@ -279,10 +279,14 @@ class DAG(object):
         self.goal_nodes = set()
         self.all_nodes = set()
         self.edges = set()
+        self.access_info.clear()
+        self.nodes_shape.clear()
 
     def serialize(self):
         # first add node information
         #print(self.all_nodes)
+        
+        #print("Edges list = ", [(e[0].gid, e[1].gid) for e in self.edges])
         cmd = to_bytes(len(self.all_nodes), 'i')
         for node in self.all_nodes:
             cmd += to_bytes(node.node_type, 'i')
@@ -374,6 +378,7 @@ class DAG(object):
             self.leaf_nodes.remove(to_node)
         self.goal_nodes.add(to_node)
         self.edges.add((from_node, to_node))
+        #print(f"Adding edge from {from_node.name} (gid={from_node.gid}) to {to_node.name} (gid={to_node.gid})")
         from_node.add_edge(to_node)
         to_node.update_dependency_list(from_node)
 

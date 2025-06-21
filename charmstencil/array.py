@@ -84,7 +84,7 @@ class Array(object):
         # FIXME check if this works
 
         # now reset kernel parameter for me and everyone in the value
-        get_kernel_graph_set().add_graph(active_graph, get_parameter_state().arrays, output_shape=key)
+        get_kernel_graph_set().add_graph(active_graph)
         get_active_dag().add_kernel_call(active_graph, get_parameter_state().arrays, output_shape=key)
         get_parameter_state().reset()
         reset_active_kernel_graph()

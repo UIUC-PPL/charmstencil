@@ -1,6 +1,6 @@
 from charmstencil.kernel import plot_kernel_graphs
 from charmstencil.array import create_array
-from charmstencil.dag import show_dag, disable_fusion
+from charmstencil.dag import show_dag, disable_fusion, get_active_dag
 from charmstencil.interface import CCSInterface
 import numpy as np
 import sys
@@ -41,11 +41,20 @@ nu = 0.01
 sigma = 0.2
 dt = sigma * dx
 
-interface = CCSInterface('192.168.1.209', 1234, odf=1)
+interface = CCSInterface('192.168.2.104', 1234, odf=4)
 
 init1(u1, v1)
 init1(u2, v2)
 init2(u1, v1, dx, dy)
+
+for i in range(10):
+  burgers(u1, u2, v1, v2, nu, dt, dx, dy)
+  u1, u2 = u2, u1
+  v1, v2 = v2, v1
+
+interface.execute()
+#show_dag()
+#get_active_dag().clear()
 
 for i in range(100):
   burgers(u1, u2, v1, v2, nu, dt, dx, dy)
@@ -53,17 +62,9 @@ for i in range(100):
   v1, v2 = v2, v1
 
 interface.execute()
+
 #show_dag()
-
-# for i in range(100):
-#   burgers(u1, u2, v1, v2, nu, dt, dx, dy)
-#   u1, u2 = u2, u1
-#   v1, v2 = v2, v1
-
-# interface.execute()
-
 #plot_kernel_graphs()
-#show_dag()
 
 # uhost = u1.get(interface)
 # vhost = v1.get(interface)

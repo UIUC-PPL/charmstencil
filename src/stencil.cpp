@@ -265,6 +265,7 @@ void Stencil::mark_done(DAGNode* node)
 
 bool Stencil::traverse_dag(DAGNode* node)
 {
+    DEBUG_PRINT("(%i, %i)> Traversing node %i %p\n", thisIndex.x, thisIndex.y, node->node_id, node);
     if (node->status == NodeStatus::Visited)
         return node->done;
 
