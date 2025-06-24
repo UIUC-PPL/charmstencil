@@ -21,8 +21,8 @@ public:
 
     bool exchange_in_progress;
     int ghost_size;
-    float* send_ghost_buffers[4];
-    float* recv_ghost_buffers[4];
+    float* send_ghost_buffers[8];
+    float* recv_ghost_buffers[8];
 
     Array(int name_, std::vector<int> shape_, std::vector<int> global_shape_, int ghost_depth_, bool* boundary)
         : name(name_)
@@ -60,6 +60,18 @@ public:
                 DEBUG_PRINT("PE %i> Allocating ghost buffers for array %i in dir %i\n", CkMyPe(), name, i);
                 hapiCheck(cudaMalloc((void**) &(send_ghost_buffers[i]), sizeof(float) * ghost_size));
                 hapiCheck(cudaMalloc((void**) &(recv_ghost_buffers[i]), sizeof(float) * ghost_size));
+                DEBUG_PRINT("PE %i> Send ghost buffer %i: %p\n", CkMyPe(), i, send_ghost_buffers[i]);
+                DEBUG_PRINT("PE %i> Recv ghost buffer %i: %p\n", CkMyPe(), i, recv_ghost_buffers[i]);
+            }
+        }
+
+        for(int i = 4; i < 8; i++)
+        {
+            if(!boundary[i])
+            {
+                DEBUG_PRINT("PE %i> Allocating ghost buffers for array %i in dir %i\n", CkMyPe(), name, i);
+                hapiCheck(cudaMalloc((void**) &(send_ghost_buffers[i]), sizeof(float) * ghost_depth * ghost_depth));
+                hapiCheck(cudaMalloc((void**) &(recv_ghost_buffers[i]), sizeof(float) * ghost_depth * ghost_depth));
                 DEBUG_PRINT("PE %i> Send ghost buffer %i: %p\n", CkMyPe(), i, send_ghost_buffers[i]);
                 DEBUG_PRINT("PE %i> Recv ghost buffer %i: %p\n", CkMyPe(), i, recv_ghost_buffers[i]);
             }

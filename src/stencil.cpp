@@ -140,6 +140,32 @@ Stencil::Stencil(int num_chares_x, int num_chares_y)
             boundary[2 * i + 1] = true;
     }
 
+    for(int i=4; i<8; i++)
+    {
+        boundary[i] = true;
+    } 
+
+    if((index[0] > 0) && (index[1] > 0))
+    {
+        boundary[4] = false;
+        num_nbrs++;
+    }
+    if((index[0] < num_chares[0] - 1) && (index[1] > 0))
+    {
+        boundary[5] = false;
+        num_nbrs++;
+    }
+    if((index[0] > 0) && (index[1] < num_chares[1] - 1))
+    {
+        boundary[6] = false;
+        num_nbrs++;
+    }
+    if((index[0] < num_chares[0] - 1) && (index[1] < num_chares[1] - 1))
+    {
+        boundary[7] = false;
+        num_nbrs++;
+    }
+
     CUdevice cuDevice;
     CUcontext cuContext;
     hapiCheck(cudaFree(0));
@@ -401,6 +427,54 @@ void Stencil::receive_ghost_data(int node_id, int name, int dir, int size, float
         break;
     }
 
+    case NORTHWEST:
+    {
+        int startx = 0;
+        int stopx = startx + array->ghost_depth;
+        int starty = 0;
+        int stopy = starty + array->ghost_depth;
+        invoke_ns_unpacking_kernel(array->data, array->recv_ghost_buffers[dir], array->ghost_depth,
+                                   startx, stopx, starty, stopy, array->strides[0], array->local_shape[0],
+                                   comm_stream);
+        break;
+    }
+
+    case NORTHEAST:
+    {
+        int startx = array->local_shape[1] + array->ghost_depth;
+        int stopx = startx + array->ghost_depth;
+        int starty = 0;
+        int stopy = starty + array->ghost_depth;
+        invoke_ns_unpacking_kernel(array->data, array->recv_ghost_buffers[dir], array->ghost_depth,
+                                   startx, stopx, starty, stopy, array->strides[0], array->local_shape[0],
+                                   comm_stream);
+        break;
+    }
+
+    case SOUTHWEST:
+    {
+        int startx = 0;
+        int stopx = startx + array->ghost_depth;
+        int starty = array->ghost_depth + array->local_shape[0];
+        int stopy = starty + array->ghost_depth;
+        invoke_ns_unpacking_kernel(array->data, array->recv_ghost_buffers[dir], array->ghost_depth,
+                                   startx, stopx, starty, stopy, array->strides[0], array->local_shape[0],
+                                   comm_stream);
+        break;
+    }
+
+    case SOUTHEAST:
+    {
+        int startx = array->ghost_depth + array->local_shape[1];
+        int stopx = startx + array->ghost_depth;
+        int starty = array->ghost_depth + array->local_shape[0];
+        int stopy = starty + array->ghost_depth;
+        invoke_ns_unpacking_kernel(array->data, array->recv_ghost_buffers[dir], array->ghost_depth,
+                                   startx, stopx, starty, stopy, array->strides[0], array->local_shape[0],
+                                   comm_stream);
+        break;
+    }
+
     default:
         break;
     }
@@ -542,6 +616,70 @@ void Stencil::send_ghost_data(KernelDAGNode *node)
                 // if (thisIndex.x == 0 && thisIndex.y == 0)
                 // DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, WEST);
                 thisProxy(thisIndex.x - 1, thisIndex.y).receive_ghost_data(node->node_id, input, EAST, array->ghost_size, CkDeviceBuffer(array->send_ghost_buffers[WEST], comm_stream));
+            }
+
+            if(!boundary[NORTHWEST])
+            {
+                int startx = array->ghost_depth;
+                int stopx = startx + array->ghost_depth;
+                int starty = array->ghost_depth;
+                int stopy = starty + array->ghost_depth;
+                // To fix this kernel arguments
+                invoke_ns_packing_kernel(array->data, array->send_ghost_buffers[NORTHWEST], array->ghost_depth,
+                                        startx, stopx, starty, stopy, array->strides[0], array->local_shape[0],
+                                        comm_stream);
+                // send ghost to northwest chare
+                // if (thisIndex.x == 0 && thisIndex.y == 0)
+                // DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, WEST);
+                thisProxy(thisIndex.x - 1, thisIndex.y - 1).receive_ghost_data(node->node_id, input, SOUTHEAST, array->ghost_depth * array->ghost_depth, CkDeviceBuffer(array->send_ghost_buffers[NORTHWEST], comm_stream));
+            }
+
+            if(!boundary[NORTHEAST])
+            {
+                int startx = array->local_shape[1];
+                int stopx = startx + array->ghost_depth;
+                int starty = array->ghost_depth;
+                int stopy = starty + array->ghost_depth;
+                // To fix this kernel arguments
+                invoke_ns_packing_kernel(array->data, array->send_ghost_buffers[NORTHEAST], array->ghost_depth,
+                                        startx, stopx, starty, stopy, array->strides[0], array->local_shape[0],
+                                        comm_stream);
+                // send ghost to northwest chare
+                // if (thisIndex.x == 0 && thisIndex.y == 0)
+                // DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, WEST);
+                thisProxy(thisIndex.x + 1, thisIndex.y - 1).receive_ghost_data(node->node_id, input, SOUTHWEST, array->ghost_depth * array->ghost_depth, CkDeviceBuffer(array->send_ghost_buffers[NORTHEAST], comm_stream));
+            }
+
+            if(!boundary[SOUTHWEST])
+            {
+                int startx = array->ghost_depth;
+                int stopx = startx + array->ghost_depth;
+                int starty = array->local_shape[0];
+                int stopy = starty + array->ghost_depth;
+                // To fix this kernel arguments
+                invoke_ns_packing_kernel(array->data, array->send_ghost_buffers[SOUTHWEST], array->ghost_depth,
+                                        startx, stopx, starty, stopy, array->strides[0], array->local_shape[0],
+                                        comm_stream);
+                // send ghost to northwest chare
+                // if (thisIndex.x == 0 && thisIndex.y == 0)
+                // DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, WEST);
+                thisProxy(thisIndex.x - 1, thisIndex.y + 1).receive_ghost_data(node->node_id, input, NORTHEAST, array->ghost_depth * array->ghost_depth, CkDeviceBuffer(array->send_ghost_buffers[SOUTHWEST], comm_stream));
+            }
+
+            if(!boundary[SOUTHEAST])
+            {
+                int startx = array->local_shape[1];
+                int stopx = startx + array->ghost_depth;
+                int starty = array->local_shape[0];
+                int stopy = starty + array->ghost_depth;
+                // To fix this kernel arguments
+                invoke_ns_packing_kernel(array->data, array->send_ghost_buffers[SOUTHEAST], array->ghost_depth,
+                                        startx, stopx, starty, stopy, array->strides[0], array->local_shape[0],
+                                        comm_stream);
+                // send ghost to northwest chare
+                // if (thisIndex.x == 0 && thisIndex.y == 0)
+                // DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, WEST);
+                thisProxy(thisIndex.x + 1, thisIndex.y + 1).receive_ghost_data(node->node_id, input, NORTHWEST, array->ghost_depth * array->ghost_depth, CkDeviceBuffer(array->send_ghost_buffers[SOUTHEAST], comm_stream));
             }
         }
     }

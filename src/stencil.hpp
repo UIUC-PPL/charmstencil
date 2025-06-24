@@ -26,6 +26,10 @@
 #define EAST 1
 #define SOUTH 2
 #define NORTH 3 
+#define NORTHWEST 4
+#define NORTHEAST 5
+#define SOUTHWEST 6
+#define SOUTHEAST 7
 
 
 extern void invoke_ns_packing_kernel(float* array, float* ghost_data, int ghost_depth, 
@@ -110,7 +114,7 @@ class Stencil : public CBase_Stencil
 private:
     double start_time;
     int num_nbrs;
-    bool boundary[4];
+    bool boundary[8];
     char* DAG_DONE;
 
     std::unordered_map<int, int> ghost_info;
