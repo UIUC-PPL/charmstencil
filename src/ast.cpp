@@ -109,8 +109,8 @@ std::string SliceNode::generate_code(Context* ctx)
         std::string idy = ctx->is_shmem(ctx->get_active()) ? fmt::format("s_idy{}", ctx->get_active()) : "idy";
         std::string idx = ctx->is_shmem(ctx->get_active()) ? fmt::format("s_idx{}", ctx->get_active()) : "idx";
         return fmt::format("IDX2D(({} + {}) * {}, ({} + {}) * {}, {})", 
-            idy, offset.index[1].start, offset.index[1].step, 
-            idx, offset.index[0].start, offset.index[0].step, 
+            idy, offset.index[0].start, offset.index[0].step, 
+            idx, offset.index[1].start, offset.index[1].step, 
             ctx->get_step());
     }
 }
