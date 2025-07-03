@@ -23,10 +23,9 @@ public:
     std::vector<int> ghost_size;
     float* send_ghost_buffers[4];
     float* recv_ghost_buffers[4];
-    int shape_original;
     int num_chares;
 
-    Array(int name_, std::vector<int> shape_, std::vector<int> global_shape_, int ghost_depth_, bool* boundary, int shape_original_, int num_chares_)
+    Array(int name_, std::vector<int> shape_, std::vector<int> global_shape_, int ghost_depth_, bool* boundary, int num_chares_)
         : name(name_)
         , local_shape(shape_)
         , global_shape(global_shape_)
@@ -34,7 +33,6 @@ public:
         , generation(0)
         , ghost_generation(-1)
         , exchange_in_progress(false)
-        , shape_original(shape_original_)
         , num_chares(num_chares_)
     {
         for(int i = 0; i < shape_.size(); i++)

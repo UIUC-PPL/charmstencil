@@ -29,6 +29,6 @@ module stencil
 
         entry [reductiontarget] void operation_done(double start);
 
-        entry void gather(int name, int index_x, int index_y, int local_dim_x, int local_dim_y, int num_chares, int data_size, float data[data_size], int shape_original);
+        entry void gather(int name, int index_x, int index_y, int local_dim_x, int local_dim_y, int num_chares, int data_size, float data[data_size], int global_dim_x, int global_dim_y);
     };
 }
