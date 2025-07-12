@@ -16,7 +16,7 @@ module stencil
 
         entry void ghost_done(KernelCallbackMsg* msg);
 
-        entry void receive_ghost_data(int node_id, int name, int dir, int size, nocopydevice float buf[size]);
+        entry void receive_ghost_data(int node_id, int name, int dir, int size, int dimension, nocopydevice float buf[size]);
     };
 
     nodegroup CodeGenCache

@@ -145,6 +145,24 @@ Stencil::Stencil(int num_chares_x, int num_chares_y)
             boundary[2 * i + 1] = true;
     }
 
+    if(index[0] > 0 && index[0] < num_chares_x-1)
+    {
+        num_nbrs_x = 2;
+    }
+    else
+    {
+        num_nbrs_x = 1;
+    }
+
+    if(index[1] > 0 && index[1] < num_chares_y-1)
+    {
+        num_nbrs_y = 2;
+    }
+    else
+    {
+        num_nbrs_y = 1;
+    }
+
     CUdevice cuDevice;
     CUcontext cuContext;
     hapiCheck(cudaFree(0));
@@ -324,7 +342,7 @@ bool Stencil::traverse_dag(DAGNode *node)
     if (ghost_exchange_needed)
     {
         DEBUG_PRINT("(%i, %i)> Send ghosts called for %i\n", thisIndex.x, thisIndex.y, kernel_node->node_id);
-        send_ghost_data(kernel_node);
+        send_ghost_data_x(kernel_node);
     }
     else{
         DEBUG_PRINT("(%i, %i)> Execute Kernel called for %i\n", thisIndex.x, thisIndex.y, kernel_node->node_id);
@@ -334,7 +352,7 @@ bool Stencil::traverse_dag(DAGNode *node)
     return kernel_node->done;
 }
 
-void Stencil::receive_ghost_data(int node_id, int name, int dir, int &size, float *&buf, CkDeviceBufferPost *device_post)
+void Stencil::receive_ghost_data(int node_id, int name, int dir, int &size, int dimension,float *&buf,CkDeviceBufferPost *device_post)
 {
     Array *array = arrays[name];
     // if (thisIndex.x == 0 && thisIndex.y == 0)
@@ -346,7 +364,7 @@ void Stencil::receive_ghost_data(int node_id, int name, int dir, int &size, floa
     device_post[0].cuda_stream = comm_stream;
 }
 
-void Stencil::receive_ghost_data(int node_id, int name, int dir, int size, float *buf)
+void Stencil::receive_ghost_data(int node_id, int name, int dir, int size, int dimension ,float *buf)
 {
     Array *array = arrays[name];
     // call unpacking kernel
@@ -360,8 +378,8 @@ void Stencil::receive_ghost_data(int node_id, int name, int dir, int size, float
     {
     case NORTH:
     {
-        int startx = array->ghost_depth;
-        int stopx = startx + array->local_shape[1];
+        int startx = 0;
+        int stopx = startx + array->shape[1];
         int starty = array->local_shape[0] + array->ghost_depth;
         int stopy = starty + array->ghost_depth;
         invoke_ns_unpacking_kernel(array->data, array->recv_ghost_buffers[dir], array->ghost_depth,
@@ -372,8 +390,8 @@ void Stencil::receive_ghost_data(int node_id, int name, int dir, int size, float
 
     case SOUTH:
     {
-        int startx = array->ghost_depth;
-        int stopx = startx + array->local_shape[1];
+        int startx = 0;
+        int stopx = startx + array->shape[1];
         int starty = 0;
         int stopy = array->ghost_depth;
         invoke_ns_unpacking_kernel(array->data, array->recv_ghost_buffers[dir], array->ghost_depth,
@@ -420,11 +438,11 @@ void Stencil::receive_ghost_data(int node_id, int name, int dir, int size, float
     else
     {
         it->second++;
-        check_ghost_completion(node_id);
+        check_ghost_completion(node_id,dimension);
     }
 }
 
-void Stencil::check_ghost_completion(int node_id)
+void Stencil::check_ghost_completion(int node_id, int dimension)
 {
     if (ghosts_expected.find(node_id) != ghosts_expected.end())
     {
@@ -437,7 +455,7 @@ void Stencil::check_ghost_completion(int node_id)
             // all ghosts received
             ghosts_expected.erase(node_id);
             ghost_counts.erase(node_id);
-            handle_ghost_completion(node_id);
+            handle_ghost_completion(node_id,dimension);
         }
     }
 }
@@ -449,7 +467,7 @@ void Stencil::ghost_done(KernelCallbackMsg *msg)
     execute_kernel(static_cast<KernelDAGNode *>(node));
 }
 
-void Stencil::handle_ghost_completion(int node_id)
+void Stencil::handle_ghost_completion(int node_id, int dimension)
 {
     // DEBUG_PRINT("(%i, %i)> Handling ghost completion for node %i\n", thisIndex.x, thisIndex.y, node_id);
     for (int i = 0; i < ghost_arrays[node_id].size(); i++)
@@ -464,10 +482,114 @@ void Stencil::handle_ghost_completion(int node_id)
     // KernelCallbackMsg* msg = new KernelCallbackMsg(node_id);
     // hapiAddCallback(comm_stream, cb, msg);
     DAGNode *node = node_cache[node_id];
-    execute_kernel(static_cast<KernelDAGNode *>(node));
+    if(dimension == 0)
+    {
+        ckout<<"Reached Here 0"<<endl;
+        send_ghost_data_y(static_cast<KernelDAGNode *>(node));
+    }
+    else if(dimension == 1)
+    {
+        ckout<<"Reached Here 1"<<endl;
+        execute_kernel(static_cast<KernelDAGNode *>(node));
+    }
+    
 }
 
-void Stencil::send_ghost_data(KernelDAGNode *node)
+void Stencil::send_ghost_data_x(KernelDAGNode *node)
+{
+    hapiCheck(cudaEventRecord(compute_event, compute_stream));
+    hapiCheck(cudaStreamWaitEvent(comm_stream, compute_event, 0));
+
+    ghost_arrays[node->node_id] = std::vector<int>();
+    // data transfer required for this node
+    for (int i = 0; i < node->inputs.size(); i++)
+    {
+        int input = node->inputs[i];
+        Array *array = arrays[input];
+        // if (thisIndex.x == 0 && thisIndex.y == 0)
+        DEBUG_PRINT("(%i, %i)> array %i, generation = %i, ghost_generation = %i, in progress = %d\n",
+            thisIndex.x, thisIndex.y, input, array->generation, array->ghost_generation, array->exchange_in_progress);
+        if (array->generation > array->ghost_generation && !array->exchange_in_progress && array->ghost_depth > 0)
+        {
+            // DEBUG_PRINT("PE %i> Sending ghost data for array %i\n", CkMyPe(), input);
+            //  ghost data is stale
+            //  send the ghost data to the neighbors
+            array->exchange_in_progress = true;
+            ghost_arrays[node->node_id].push_back(input);
+
+            // if (!boundary[NORTH])
+            // {
+            //     int startx = array->ghost_depth;
+            //     int stopx = startx + array->local_shape[1];
+            //     int starty = array->local_shape[0];
+            //     int stopy = starty + array->ghost_depth;
+            //     invoke_ns_packing_kernel(array->data, array->send_ghost_buffers[NORTH], array->ghost_depth,
+            //                              startx, stopx, starty, stopy, array->strides[0], array->local_shape[1],
+            //                              comm_stream);
+            //     // send ghost to north chare
+            //     // if (thisIndex.x == 0 && thisIndex.y == 0)
+            //     // DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, NORTH);
+            //     // ckout<<thisIndex.x<<" "<<thisIndex.y<<" Sending "<<array->ghost_size[1]<<" to "<<thisIndex.x<<" "<<thisIndex.y + 1<<endl;
+            //     thisProxy(thisIndex.x, thisIndex.y + 1).receive_ghost_data(node->node_id, input, SOUTH, array->ghost_size[1], CkDeviceBuffer(array->send_ghost_buffers[NORTH], comm_stream));
+            // }
+
+            // if (!boundary[SOUTH])
+            // {
+            //     int startx = array->ghost_depth;
+            //     int stopx = startx + array->local_shape[1];
+            //     int starty = array->ghost_depth;
+            //     int stopy = starty + array->ghost_depth;
+            //     invoke_ns_packing_kernel(array->data, array->send_ghost_buffers[SOUTH], array->ghost_depth,
+            //                              startx, stopx, starty, stopy, array->strides[0], array->local_shape[1],
+            //                              comm_stream);
+            //     // send ghost to south chare
+            //     // if (thisIndex.x == 0 && thisIndex.y == 0)
+            //     // DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, SOUTH);
+            //     // ckout<<thisIndex.x<<" "<<thisIndex.y<<" Sending "<<array->ghost_size[1]<<" to "<<thisIndex.x<<" "<<thisIndex.y - 1<<endl;
+            //     thisProxy(thisIndex.x, thisIndex.y - 1).receive_ghost_data(node->node_id, input, NORTH, array->ghost_size[1], CkDeviceBuffer(array->send_ghost_buffers[SOUTH], comm_stream));
+            // }
+
+            if (!boundary[EAST])
+            {
+                int startx = array->local_shape[1];
+                int stopx = startx + array->ghost_depth;
+                int starty = array->ghost_depth;
+                int stopy = starty + array->local_shape[0];
+                invoke_ew_packing_kernel(array->data, array->send_ghost_buffers[EAST], array->ghost_depth,
+                                         startx, stopx, starty, stopy, array->strides[0], array->local_shape[0],
+                                         comm_stream);
+                // send ghost to east chare
+                // if (thisIndex.x == 0 && thisIndex.y == 0)
+                DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, EAST);
+                // ckout<<thisIndex.x<<" "<<thisIndex.y<<" Sending "<<array->ghost_size[0]<<" to "<<thisIndex.x + 1<<" "<<thisIndex.y<<endl;
+                thisProxy(thisIndex.x + 1, thisIndex.y).receive_ghost_data(node->node_id, input, WEST, array->ghost_size[0],0,CkDeviceBuffer(array->send_ghost_buffers[EAST], comm_stream));
+            }
+
+            if (!boundary[WEST])
+            {
+                int startx = array->ghost_depth;
+                int stopx = startx + array->ghost_depth;
+                int starty = array->ghost_depth;
+                int stopy = starty + array->local_shape[0];
+                invoke_ew_packing_kernel(array->data, array->send_ghost_buffers[WEST], array->ghost_depth,
+                                         startx, stopx, starty, stopy, array->strides[0], array->local_shape[0],
+                                         comm_stream);
+                // send ghost to west chare
+                // if (thisIndex.x == 0 && thisIndex.y == 0)
+                DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, WEST);
+                // ckout<<thisIndex.x<<" "<<thisIndex.y<<" Sending "<<array->ghost_size[0]<<" to "<<thisIndex.x - 1<<" "<<thisIndex.y<<endl;
+                thisProxy(thisIndex.x - 1, thisIndex.y).receive_ghost_data(node->node_id, input, EAST, array->ghost_size[0],0,CkDeviceBuffer(array->send_ghost_buffers[WEST], comm_stream));
+            }
+        }
+    }
+
+    // cudaStreamSynchronize(comm_stream);
+
+    ghosts_expected[node->node_id] = num_nbrs_x * ghost_arrays[node->node_id].size();
+    check_ghost_completion(node->node_id,0);
+}
+
+void Stencil::send_ghost_data_y(KernelDAGNode *node)
 {
     hapiCheck(cudaEventRecord(compute_event, compute_stream));
     hapiCheck(cudaStreamWaitEvent(comm_stream, compute_event, 0));
@@ -491,8 +613,8 @@ void Stencil::send_ghost_data(KernelDAGNode *node)
 
             if (!boundary[NORTH])
             {
-                int startx = array->ghost_depth;
-                int stopx = startx + array->local_shape[1];
+                int startx = 0;
+                int stopx = startx + array->shape[1];
                 int starty = array->local_shape[0];
                 int stopy = starty + array->ghost_depth;
                 invoke_ns_packing_kernel(array->data, array->send_ghost_buffers[NORTH], array->ghost_depth,
@@ -500,15 +622,15 @@ void Stencil::send_ghost_data(KernelDAGNode *node)
                                          comm_stream);
                 // send ghost to north chare
                 // if (thisIndex.x == 0 && thisIndex.y == 0)
-                // DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, NORTH);
+                DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, NORTH);
                 // ckout<<thisIndex.x<<" "<<thisIndex.y<<" Sending "<<array->ghost_size[1]<<" to "<<thisIndex.x<<" "<<thisIndex.y + 1<<endl;
-                thisProxy(thisIndex.x, thisIndex.y + 1).receive_ghost_data(node->node_id, input, SOUTH, array->ghost_size[1], CkDeviceBuffer(array->send_ghost_buffers[NORTH], comm_stream));
+                thisProxy(thisIndex.x, thisIndex.y + 1).receive_ghost_data(node->node_id, input, SOUTH, array->shape[1] * array->ghost_depth, 1,CkDeviceBuffer(array->send_ghost_buffers[NORTH], comm_stream));
             }
 
             if (!boundary[SOUTH])
             {
-                int startx = array->ghost_depth;
-                int stopx = startx + array->local_shape[1];
+                int startx = 0;
+                int stopx = startx + array->shape[1];
                 int starty = array->ghost_depth;
                 int stopy = starty + array->ghost_depth;
                 invoke_ns_packing_kernel(array->data, array->send_ghost_buffers[SOUTH], array->ghost_depth,
@@ -516,49 +638,49 @@ void Stencil::send_ghost_data(KernelDAGNode *node)
                                          comm_stream);
                 // send ghost to south chare
                 // if (thisIndex.x == 0 && thisIndex.y == 0)
-                // DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, SOUTH);
+                DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, SOUTH);
                 // ckout<<thisIndex.x<<" "<<thisIndex.y<<" Sending "<<array->ghost_size[1]<<" to "<<thisIndex.x<<" "<<thisIndex.y - 1<<endl;
-                thisProxy(thisIndex.x, thisIndex.y - 1).receive_ghost_data(node->node_id, input, NORTH, array->ghost_size[1], CkDeviceBuffer(array->send_ghost_buffers[SOUTH], comm_stream));
+                thisProxy(thisIndex.x, thisIndex.y - 1).receive_ghost_data(node->node_id, input, NORTH, array->shape[1] * array->ghost_depth, 1,CkDeviceBuffer(array->send_ghost_buffers[SOUTH], comm_stream));
             }
 
-            if (!boundary[EAST])
-            {
-                int startx = array->local_shape[1];
-                int stopx = startx + array->ghost_depth;
-                int starty = array->ghost_depth;
-                int stopy = starty + array->local_shape[0];
-                invoke_ew_packing_kernel(array->data, array->send_ghost_buffers[EAST], array->ghost_depth,
-                                         startx, stopx, starty, stopy, array->strides[0], array->local_shape[0],
-                                         comm_stream);
-                // send ghost to east chare
-                // if (thisIndex.x == 0 && thisIndex.y == 0)
-                // DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, EAST);
-                // ckout<<thisIndex.x<<" "<<thisIndex.y<<" Sending "<<array->ghost_size[0]<<" to "<<thisIndex.x + 1<<" "<<thisIndex.y<<endl;
-                thisProxy(thisIndex.x + 1, thisIndex.y).receive_ghost_data(node->node_id, input, WEST, array->ghost_size[0], CkDeviceBuffer(array->send_ghost_buffers[EAST], comm_stream));
-            }
+            // if (!boundary[EAST])
+            // {
+            //     int startx = array->local_shape[1];
+            //     int stopx = startx + array->ghost_depth;
+            //     int starty = array->ghost_depth;
+            //     int stopy = starty + array->local_shape[0];
+            //     invoke_ew_packing_kernel(array->data, array->send_ghost_buffers[EAST], array->ghost_depth,
+            //                              startx, stopx, starty, stopy, array->strides[0], array->local_shape[0],
+            //                              comm_stream);
+            //     // send ghost to east chare
+            //     // if (thisIndex.x == 0 && thisIndex.y == 0)
+            //     // DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, EAST);
+            //     // ckout<<thisIndex.x<<" "<<thisIndex.y<<" Sending "<<array->ghost_size[0]<<" to "<<thisIndex.x + 1<<" "<<thisIndex.y<<endl;
+            //     thisProxy(thisIndex.x + 1, thisIndex.y).receive_ghost_data(node->node_id, input, WEST, array->ghost_size[0], CkDeviceBuffer(array->send_ghost_buffers[EAST], comm_stream));
+            // }
 
-            if (!boundary[WEST])
-            {
-                int startx = array->ghost_depth;
-                int stopx = startx + array->ghost_depth;
-                int starty = array->ghost_depth;
-                int stopy = starty + array->local_shape[0];
-                invoke_ew_packing_kernel(array->data, array->send_ghost_buffers[WEST], array->ghost_depth,
-                                         startx, stopx, starty, stopy, array->strides[0], array->local_shape[0],
-                                         comm_stream);
-                // send ghost to west chare
-                // if (thisIndex.x == 0 && thisIndex.y == 0)
-                // DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, WEST);
-                // ckout<<thisIndex.x<<" "<<thisIndex.y<<" Sending "<<array->ghost_size[0]<<" to "<<thisIndex.x - 1<<" "<<thisIndex.y<<endl;
-                thisProxy(thisIndex.x - 1, thisIndex.y).receive_ghost_data(node->node_id, input, EAST, array->ghost_size[0], CkDeviceBuffer(array->send_ghost_buffers[WEST], comm_stream));
-            }
+            // if (!boundary[WEST])
+            // {
+            //     int startx = array->ghost_depth;
+            //     int stopx = startx + array->ghost_depth;
+            //     int starty = array->ghost_depth;
+            //     int stopy = starty + array->local_shape[0];
+            //     invoke_ew_packing_kernel(array->data, array->send_ghost_buffers[WEST], array->ghost_depth,
+            //                              startx, stopx, starty, stopy, array->strides[0], array->local_shape[0],
+            //                              comm_stream);
+            //     // send ghost to west chare
+            //     // if (thisIndex.x == 0 && thisIndex.y == 0)
+            //     // DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, WEST);
+            //     // ckout<<thisIndex.x<<" "<<thisIndex.y<<" Sending "<<array->ghost_size[0]<<" to "<<thisIndex.x - 1<<" "<<thisIndex.y<<endl;
+            //     thisProxy(thisIndex.x - 1, thisIndex.y).receive_ghost_data(node->node_id, input, EAST, array->ghost_size[0], CkDeviceBuffer(array->send_ghost_buffers[WEST], comm_stream));
+            // }
         }
     }
 
     // cudaStreamSynchronize(comm_stream);
 
-    ghosts_expected[node->node_id] = num_nbrs * ghost_arrays[node->node_id].size();
-    check_ghost_completion(node->node_id);
+    ghosts_expected[node->node_id] = num_nbrs_y * ghost_arrays[node->node_id].size();
+    check_ghost_completion(node->node_id,1);
 }
 
 void Stencil::kernel_done(KernelCallbackMsg *msg)

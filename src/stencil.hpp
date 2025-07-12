@@ -110,6 +110,8 @@ class Stencil : public CBase_Stencil
 private:
     double start_time;
     int num_nbrs;
+    int num_nbrs_x;
+    int num_nbrs_y;
     bool boundary[4];
     char* DAG_DONE;
 
@@ -146,21 +148,23 @@ public:
 
     void gather(int name);
 
-    void receive_ghost_data(int node_id, int name, int dir, int& size, float* &buf, CkDeviceBufferPost* device_post);
+    void receive_ghost_data(int node_id, int name, int dir, int& size, int dimension ,float* &buf,CkDeviceBufferPost* device_post);
 
-    void receive_ghost_data(int node_id, int name, int dir, int size, float* buf);
+    void receive_ghost_data(int node_id, int name, int dir, int size, int dimension ,float* buf);
 
-    void check_ghost_completion(int node_id);
+    void check_ghost_completion(int node_id, int dimension);
 
     void ghost_done(KernelCallbackMsg* msg);
 
-    void handle_ghost_completion(int node_id);
+    void handle_ghost_completion(int node_id, int dimension);
 
     void receive_dag(int size, char* cmd);
 
     bool traverse_dag(DAGNode* node);
 
-    void send_ghost_data(KernelDAGNode* node);
+    void send_ghost_data_x(KernelDAGNode* node);
+
+    void send_ghost_data_y(KernelDAGNode* node);
 
     void execute_kernel(KernelDAGNode* node);
 
