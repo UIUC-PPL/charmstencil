@@ -24,6 +24,8 @@ public:
     float* send_ghost_buffers[4];
     float* recv_ghost_buffers[4];
 
+    Array(int name_) : name(name_) {}
+
     Array(int name_, std::vector<int> shape_, std::vector<int> global_shape_, int ghost_depth_, bool* boundary)
         : name(name_)
         , local_shape(shape_)
@@ -41,7 +43,7 @@ public:
             strides[i] = strides[i + 1] * shape[i + 1];
         total_size = shape[0] * shape[1];
         total_local_size = local_shape[0] * local_shape[1];
-        hapiCheck(cudaMalloc((void**) &data, sizeof(float) * total_size));
+        hapiCheck(hapiMalloc((void**) &data, sizeof(float) * total_size));
         ghost_size = ghost_depth * local_shape[0]; // FIXME assuming square array
         allocate_ghost_buffers(boundary);
     }
@@ -51,6 +53,38 @@ public:
         hapiCheck(cudaFree(data));
     }
 
+    void pup(PUP::er &p)
+    {
+        p | shape;
+        p | local_shape;
+        p | global_shape;
+        p | ghost_depth;
+        p | strides;
+        p | exchange_in_progress;
+        p | generation;
+        p | ghost_generation;
+        p | total_size;
+        p | total_local_size;
+        p | ghost_size;
+        for (int i = 0; i < 4; i++)
+        {
+            if (p.isUnpacking())
+            {
+                hapiCheck(hapiMalloc((void**)&send_ghost_buffers[i], sizeof(float) * ghost_size));
+                hapiCheck(hapiMalloc((void**)&recv_ghost_buffers[i], sizeof(float) * ghost_size));
+            }
+
+            p(&(send_ghost_buffers[i]), ghost_size, PUP::PUPMode::DEVICE);
+            p(&(recv_ghost_buffers[i]), ghost_size, PUP::PUPMode::DEVICE);
+        }
+
+        if (p.isUnpacking())
+        {
+            hapiCheck(hapiMalloc((void**)&data, sizeof(float) * total_size));
+        }
+        p(&data, total_size, PUP::PUPMode::DEVICE);
+    }
+
     void allocate_ghost_buffers(bool* boundary)
     {
         for (int i = 0; i < 4; i++)
@@ -58,8 +92,8 @@ public:
             if (!boundary[i])
             {
                 DEBUG_PRINT("PE %i> Allocating ghost buffers for array %i in dir %i\n", CkMyPe(), name, i);
-                hapiCheck(cudaMalloc((void**) &(send_ghost_buffers[i]), sizeof(float) * ghost_size));
-                hapiCheck(cudaMalloc((void**) &(recv_ghost_buffers[i]), sizeof(float) * ghost_size));
+                hapiCheck(hapiMalloc((void**) &(send_ghost_buffers[i]), sizeof(float) * ghost_size));
+                hapiCheck(hapiMalloc((void**) &(recv_ghost_buffers[i]), sizeof(float) * ghost_size));
                 DEBUG_PRINT("PE %i> Send ghost buffer %i: %p\n", CkMyPe(), i, send_ghost_buffers[i]);
                 DEBUG_PRINT("PE %i> Recv ghost buffer %i: %p\n", CkMyPe(), i, recv_ghost_buffers[i]);
             }

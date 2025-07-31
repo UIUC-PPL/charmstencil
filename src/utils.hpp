@@ -7,6 +7,8 @@
 #include <string>
 #include <cuda.h>
 
+#include "charm++.h"
+
 #ifndef NDEBUG
 #define DEBUG_PRINT(...) CkPrintf(__VA_ARGS__)
 #else
@@ -72,6 +74,13 @@ struct Slice1D
         step = other.step;
     }
 
+    void pup(PUP::er &p)
+    {
+        p | start;
+        p | stop;
+        p | step;
+    }
+
     bool operator==(const Slice1D& other) const
     {
         return start == other.start && stop == other.stop && step == other.step;
@@ -98,6 +107,12 @@ struct Slice
     {
         index[0] = other.index[0];
         index[1] = other.index[1];
+    }
+
+    void pup(PUP::er &p)
+    {
+        index[0].pup(p);
+        index[1].pup(p);
     }
 
     bool operator==(const Slice& other) const

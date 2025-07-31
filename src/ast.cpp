@@ -11,6 +11,11 @@ void Context::set_active(int name)
     active_stack.push(name);
 }
 
+void Context::pup(PUP::er &p)
+{
+    p | shmem_info;
+}
+
 int Context::get_active()
 {
     return active_stack.top();
@@ -201,6 +206,78 @@ std::string OperationNode::generate_code(Context* ctx)
     return "";
 }
 
+void Kernel::pup(PUP::er &p)
+{
+    context->pup(p);
+    p | kernel_id;
+    p | num_args;
+    p | num_outputs;
+    p | outputs;
+    p | hash;
+    int size;
+    if (p.isUnpacking())
+    {
+        p | size;
+        for (int i = 0; i < size; i++)
+        {
+            int name;
+            p | name;
+            Slice slice;
+            slice.pup(p);
+            output_slices[name] = slice;
+        }
+    }
+    else
+    {
+        size = output_slices.size();
+        p | size;
+        int argname;
+        for (auto& it : output_slices)
+        {
+            argname = it.first;
+            p | argname;
+            it.second.pup(p);
+        }
+    }
+    p | ghost_info;
+
+    int argname;
+    if (p.isUnpacking())
+    {
+        p | size;
+        for (int i = 0; i < size; i++)
+        {
+            p | argname;
+            std::unordered_set<Slice, SliceHash> slices;
+            int num_slices;
+            p | num_slices;
+            for (int j = 0; j < num_slices; j++)
+            {
+                Slice slice;
+                slice.pup(p);
+                slices.insert(slice);
+            }
+            mem_access_info[argname] = slices;
+        }
+    }
+    else
+    {
+        size = mem_access_info.size();
+        p | size;
+        for (auto& it : mem_access_info)
+        {
+            argname = it.first;
+            p | argname;
+            int num_slices = it.second.size();
+            p | num_slices;
+            for (const Slice& slice : it.second)
+            {
+                Slice slice_copy = slice; // Copy to ensure correct pup behavior
+                slice_copy.pup(p);
+            }
+        }
+    }
+}
 
 void Kernel::register_output_slice(int name, Slice& slice)
 {

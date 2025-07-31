@@ -8,6 +8,11 @@ CodeGenCache::CodeGenCache()
     lock = CmiCreateLock();
 }
 
+CodeGenCache::CodeGenCache(CkMigrateMessage *m)
+{
+    lock = CmiCreateLock();
+}
+
 CodeGenCache::~CodeGenCache()
 {
     CmiDestroyLock(lock);
@@ -16,6 +21,53 @@ CodeGenCache::~CodeGenCache()
 compute_fun_t CodeGenCache::lookup(size_t hash)
 {
     return cache[hash];
+}
+
+void CodeGenCache::pup(PUP::er &p)
+{
+    p | start_time;
+    p | stencil_proxy;
+    int size;
+    if (p.isUnpacking())
+    {
+        p | size;
+        for (int i = 0; i < size; i++)
+        {
+            Kernel *knl = new Kernel();
+            knl->pup(p);
+            kernels[knl->kernel_id] = knl;
+        }
+    }
+    else
+    {
+        size = kernels.size();
+        p | size;
+        for (const auto &it : kernels)
+        {
+            it.second->pup(p);
+        }
+    }
+
+    if (p.isUnpacking())
+    {
+        p | size;
+        for (int i = 0; i < size; i++)
+        {
+            size_t hash;
+            p | hash;
+            cache[hash] = load_kernel(hash, thisIndex);
+        }
+    }
+    else
+    {
+        size = cache.size();
+        p | size;
+        for (const auto &it : cache)
+        {
+            size_t hash = it.first;
+            p | hash;
+        }
+    }
 }
 
 void CodeGenCache::receive(int size, char *cmd, CProxy_Stencil stencil_proxy_)
@@ -113,9 +165,6 @@ void CodeGenCache::gather(int name, int index_x, int index_y, int local_dim, int
 Stencil::Stencil(int num_chares_x, int num_chares_y)
     : num_nbrs(0)
 {
-    char dummy;
-    DAG_DONE = &dummy;
-
     index[0] = thisIndex.x;
     index[1] = thisIndex.y;
 
@@ -159,7 +208,14 @@ Stencil::Stencil(int num_chares_x, int num_chares_y)
     thisProxy(thisIndex.x, thisIndex.y, thisIndex.z).start();*/
 }
 
-Stencil::Stencil(CkMigrateMessage *m) {}
+Stencil::Stencil(CkMigrateMessage *m) 
+{
+    hapiCheck(cudaStreamCreateWithPriority(&compute_stream, cudaStreamDefault, 0));
+    hapiCheck(cudaStreamCreateWithPriority(&comm_stream, cudaStreamDefault, -1));
+
+    hapiCheck(cudaEventCreateWithFlags(&compute_event, cudaEventDisableTiming));
+    hapiCheck(cudaEventCreateWithFlags(&comm_event, cudaEventDisableTiming));
+}
 
 Stencil::~Stencil()
 {
@@ -171,10 +227,59 @@ Stencil::~Stencil()
     // }
     // free(send_ghosts);
     // free(recv_ghosts);
+    hapiCheck(cudaStreamDestroy(compute_stream));
+    hapiCheck(cudaStreamDestroy(comm_stream));
+    hapiCheck(cudaEventDestroy(compute_event));
+    hapiCheck(cudaEventDestroy(comm_event));
     for (auto &entry : arrays)
     {
         Array *array = entry.second;
         delete array;
+    }
+}
+
+void Stencil::pup(PUP::er &p)
+{
+    p | num_chares[0];
+    p | num_chares[1];
+    p | index[0];
+    p | index[1];
+    p | num_nbrs;
+    p | ghost_info;
+    for (int i = 0; i < 4; i++)
+        p | boundary[i];
+    p | ghost_counts;
+    p | ghosts_expected;
+    p | ghost_arrays;
+    int size;
+    if (p.isUnpacking())
+    {
+        p | size;
+    }
+    else
+    {
+        size = arrays.size();
+        p | size;
+    }
+    
+    if (!p.isUnpacking())
+    {
+        for (auto const& [name, array] : arrays)
+        {
+            p | array->name;
+            array->pup(p);
+        }
+    }
+    else
+    {
+        for (int i = 0; i < size; i++)
+        {
+            // deserialize the array
+            int name;
+            p | name;
+            arrays[name] = new Array(name);
+            arrays[name]->pup(p);
+        }
     }
 }
 

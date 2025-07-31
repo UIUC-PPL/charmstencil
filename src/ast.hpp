@@ -27,6 +27,8 @@ public:
 
     Context();
 
+    void pup(PUP::er &p);
+
     void set_active(int name);
 
     int get_active();
@@ -126,6 +128,8 @@ public:
     std::unordered_map<int, Slice> output_slices;
     std::unordered_map<int, int> ghost_info; // thuis is mapping argument index to ghost info
     std::unordered_map<int, std::unordered_set<Slice, SliceHash>> mem_access_info;
+
+    void pup(PUP::er &p);
 
     void register_output_slice(int name, Slice& slice);
 

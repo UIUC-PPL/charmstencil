@@ -88,10 +88,15 @@ private:
 
 public:
     std::unordered_map<int, Kernel*> kernels;
+    //std::unordered_map<int, std::unordered_map<int, int>> kernel_ghost_info;
 
     CodeGenCache();
 
+    CodeGenCache(CkMigrateMessage *m);
+
     ~CodeGenCache();
+
+    void pup(PUP::er &p);
 
     compute_fun_t lookup(size_t hash);
 
@@ -139,6 +144,8 @@ public:
     Stencil(CkMigrateMessage* m);
 
     ~Stencil();
+
+    void pup(PUP::er &p);
 
     void mark_done(DAGNode* node);
 

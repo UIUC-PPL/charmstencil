@@ -1,5 +1,5 @@
 CHARMDIR=/home/aditya/charm/
-CHARMC=$(CHARMDIR)/mpi-linux-x86_64-cuda/bin/charmc
+CHARMC=$(CHARMDIR)/bin/charmc
 CHARM_INC=-I$(CHARMDIR)/include
 NVCC=nvcc
 NVCC_FLAGS=-c -std=c++17  -use_fast_math -O3 -I/home1/08450/tg877491/vcpkg/installed/arm64-linux/include
