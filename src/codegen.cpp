@@ -66,11 +66,11 @@ void generate_kernel(Kernel* knl, int suffix)
     DEBUG_PRINT("Generating kernel %s\n", filename.c_str());
     // Check if the PTX file already exists
     std::string ptx_filename = filename + ".ptx";
-    if (FILE* f = fopen(ptx_filename.c_str(), "r")) {
-        fclose(f);
-        DEBUG_PRINT("PTX file %s already exists, skipping generation.\n", ptx_filename.c_str());
-        return;
-    }
+    //if (FILE* f = fopen(ptx_filename.c_str(), "r")) {
+    //    fclose(f);
+    //    DEBUG_PRINT("PTX file %s already exists, skipping generation.\n", ptx_filename.c_str());
+    //    return;
+    //}
     FILE* genfile = fopen((filename + ".cu").c_str(), "w");
     knl->context = write_kernel(genfile, knl);
     fclose(genfile);

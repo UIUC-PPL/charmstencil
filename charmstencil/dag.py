@@ -247,8 +247,6 @@ class DAG(object):
 
         self.nodes_seq = []
 
-        self.nodes_shape = {}
-
         self.edges = set()
 
         self.access_info = {}
@@ -293,7 +291,6 @@ class DAG(object):
         self.all_nodes = set()
         self.edges = set()
         self.access_info.clear()
-        self.nodes_shape.clear()
 
     def serialize(self):
         # first add node information
@@ -341,11 +338,6 @@ class DAG(object):
         self.leaf_nodes.add(node)
         self.all_nodes.add(node)
         self.goal_nodes.add(node)
-
-        if isinstance(node, KernelDAGNode):
-            if node.output_shape not in self.nodes_shape:
-                self.nodes_shape[node.output_shape] = []
-            self.nodes_shape[node.output_shape].append(node)
 
         self.nodes_seq.append(node)
 

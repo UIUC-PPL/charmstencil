@@ -382,7 +382,7 @@ void Stencil::mark_done(DAGNode *node)
 
 bool Stencil::traverse_dag(DAGNode *node)
 {
-    DEBUG_PRINT("(%i, %i)> Traversing node %i %p\n", thisIndex.x, thisIndex.y, node->node_id, node);
+    //DEBUG_PRINT("(%i, %i)> Traversing node %i %p\n", thisIndex.x, thisIndex.y, node->node_id, node);
     if (node->status == NodeStatus::Visited)
         return node->done;
 
@@ -680,7 +680,7 @@ void Stencil::kernel_done(KernelCallbackMsg *msg)
 void Stencil::execute_kernel(KernelDAGNode *node)
 {
     // if (thisIndex.x == 0 && thisIndex.y == 0)
-    DEBUG_PRINT("(%i, %i)> Executing kernel %i\n", thisIndex.x, thisIndex.y, node->node_id);
+    DEBUG_PRINT("(%i, %i)> Executing kernel %i\n", thisIndex.x, thisIndex.y, node->kernel_id);
     hapiCheck(cudaEventRecord(comm_event, comm_stream));
     hapiCheck(cudaStreamWaitEvent(compute_stream, comm_event, 0));
 
@@ -760,7 +760,7 @@ void Stencil::create_array(int name, std::vector<int> shape)
 {
     DEBUG_PRINT("PE %i> Create field %i with depth\n", CkMyPe(), name);
     std::vector<int> local_shape;
-    int ghost_depth = ghost_info[name];
+    int ghost_depth = 1; //ghost_info[name];
     for (int i = 0; i < 2; i++)
     {
         int local_dim = shape[i] / num_chares[i];
