@@ -23,6 +23,11 @@ public:
         CcsRegisterHandler("operation", (CmiHandler) Server::operation_handler);
         CcsRegisterHandler("fetch", (CmiHandler) Server::fetch_handler);
     }
+
+    void pup(PUP::er &p) 
+    {
+        p | stencil;
+    }
 };
 
 #include "server.def.h"

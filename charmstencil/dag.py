@@ -58,6 +58,18 @@ class DAGNode(object):
         self.dependency_list.add(node)
         self.dependency_list.update(node.dependency_list)
 
+    def propogate_dependency_list(self, deps):
+        """
+        Propagates the dependency list to the children of this node.
+
+        Args:
+            deps (set): A set of dependencies to be added.
+        """
+        for dep in deps:
+            self.update_dependency_list(dep)
+        for child in self.children:
+            child.propogate_dependency_list(deps)
+
     def add_edge(self, dependency):
         """
         Adds a dependency edge to the array node.
@@ -144,7 +156,6 @@ class KernelDAGNode(DAGNode):
             self.fusion_nodes = fusion_nodes
 
     def check_dependencies(self, other):
-
         for node in self.dependency_list:
             if node in other.fusion_nodes:
                 return False
@@ -181,7 +192,7 @@ class KernelDAGNode(DAGNode):
 
     def check_fusion(self, other):
         # check RAW and WAR dependencies
-        return self.check_dependencies(other)
+        return self.check_dependencies(other) and self.output_shape == other.output_shape
     
     def fuse(self, other):
         """
@@ -233,6 +244,8 @@ class DAG(object):
         self.goal_nodes = set()
         # all nodes are the nodes in the DAG
         self.all_nodes = set()
+
+        self.nodes_seq = []
 
         self.nodes_shape = {}
 
@@ -322,7 +335,7 @@ class DAG(object):
         Args:
             node (DAGNode): The node to be added.
         """
-        print(f'Adding node {node.name} to DAG')
+        #print(f'Adding node {node.name} to DAG')
         #if isinstance(node, ArrayDAGNode):
         #    self.leaf_nodes.append(node)
         self.leaf_nodes.add(node)
@@ -333,6 +346,8 @@ class DAG(object):
             if node.output_shape not in self.nodes_shape:
                 self.nodes_shape[node.output_shape] = []
             self.nodes_shape[node.output_shape].append(node)
+
+        self.nodes_seq.append(node)
 
     def replace_node(self, node, new_node):
         #print(f'Replacing node {node.name} with {new_node.name}')
@@ -383,38 +398,27 @@ class DAG(object):
         to_node.update_dependency_list(from_node)
 
     def fuse(self):
-        for shape, nodes in self.nodes_shape.items():
-            # Greedily fuse all pairs of nodes with the same output shape
-            changed = True
-            while changed:
-                changed = False
-                n = len(nodes)
-                i = 0
-                #print(f'Fusing nodes of shape {shape} ({n} nodes)')
-                while i < n:
-                    j = i + 1
-                    while j < n:
-                        node1 = nodes[i]
-                        node2 = nodes[j]
-                        if node1.check_fusion(node2):
-                            #print("Before fusion:", nodes)
-                            fused_node = node1.fuse(node2)
-                            self.replace_node(node1, fused_node)
-                            self.replace_node(node2, fused_node)
-                            #print(f'Fused {node1.name} and {node2.name} into {fused_node.name}')
-                            nodes.pop(j)
-                            nodes.pop(i)
-                            nodes.append(fused_node)
-                            #print(nodes)
-                            n -= 1
-                            changed = True
-                            break
-                        else:
-                            j += 1
-                    if changed:
-                        break
+        n = len(self.nodes_seq)
+        i = 0
+        while i < n - 1:
+            node1 = self.nodes_seq[i]
+            node2 = self.nodes_seq[i + 1] if i + 1 < n else None
+
+            if isinstance(node1, KernelDAGNode) and isinstance(node2, KernelDAGNode):
+                if node1.check_fusion(node2):
+                    fused_node = node1.fuse(node2)
+                    self.replace_node(node1, fused_node)
+                    self.replace_node(node2, fused_node)
+                    
+                    # Replace the two nodes with the new fused node
+                    self.nodes_seq.pop(i + 1)
+                    self.nodes_seq[i] = fused_node
+                    
+                    n -= 1  # Decrease the count of nodes
+                else:
                     i += 1
-            self.nodes_shape[shape] = nodes
+            else:
+                i += 1
 
         used_kernels = set()
         for node in self.all_nodes:

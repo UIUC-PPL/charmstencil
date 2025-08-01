@@ -64,13 +64,20 @@ void generate_kernel(Kernel* knl, int suffix)
 {
     std::string filename = fmt::format("generated/kernel_{}_{}", knl->hash, suffix);
     DEBUG_PRINT("Generating kernel %s\n", filename.c_str());
+    // Check if the PTX file already exists
+    std::string ptx_filename = filename + ".ptx";
+    if (FILE* f = fopen(ptx_filename.c_str(), "r")) {
+        fclose(f);
+        DEBUG_PRINT("PTX file %s already exists, skipping generation.\n", ptx_filename.c_str());
+        return;
+    }
     FILE* genfile = fopen((filename + ".cu").c_str(), "w");
     knl->context = write_kernel(genfile, knl);
     fclose(genfile);
 
     // compile filename
     std::string compile_cmd = fmt::format(
-            "nvcc -std=c++11 -arch sm_60 --ptx -o {}.ptx {}.cu -O3 -Xptxas -O3 -g -lcuda", 
+            "nvcc -std=c++11 -arch sm_60 --ptx -o {}.ptx {}.cu -O3 -Xptxas --use-fast-math -O3 -g -lcuda", 
             filename, filename);
 
     system(compile_cmd.c_str());

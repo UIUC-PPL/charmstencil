@@ -165,6 +165,7 @@ void CodeGenCache::gather(int name, int index_x, int index_y, int local_dim, int
 Stencil::Stencil(int num_chares_x, int num_chares_y)
     : num_nbrs(0)
 {
+    usesAtSync = true;
     index[0] = thisIndex.x;
     index[1] = thisIndex.y;
 
@@ -210,6 +211,10 @@ Stencil::Stencil(int num_chares_x, int num_chares_y)
 
 Stencil::Stencil(CkMigrateMessage *m) 
 {
+    CUdevice cuDevice;
+    CUcontext cuContext;
+    hapiCheck(cudaFree(0));
+
     hapiCheck(cudaStreamCreateWithPriority(&compute_stream, cudaStreamDefault, 0));
     hapiCheck(cudaStreamCreateWithPriority(&comm_stream, cudaStreamDefault, -1));
 
@@ -261,7 +266,7 @@ void Stencil::pup(PUP::er &p)
         size = arrays.size();
         p | size;
     }
-    
+
     if (!p.isUnpacking())
     {
         for (auto const& [name, array] : arrays)
@@ -282,6 +287,14 @@ void Stencil::pup(PUP::er &p)
         }
     }
 }
+
+void Stencil::rescale()
+{
+    AtSync();
+}
+
+void Stencil::ResumeFromSync()
+{}
 
 void Stencil::gather(int name)
 {

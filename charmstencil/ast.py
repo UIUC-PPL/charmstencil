@@ -16,7 +16,7 @@ def get_next_kernel_id():
     return id
 
 
-OPCODES = {'noop': 0, 'create': 1, '+': 2, '-': 3, '*': 4, 'norm': 5,
+OPCODES = {'noop': 0, 'create': 1, '+': 2, '-': 3, '*': 4, '**': 5,
            'getitem': 6, 'setitem': 7, 'exchange_ghosts': 8}
 
 
@@ -123,8 +123,11 @@ class KernelParameter(object):
     def __rmul__(self, other):
         return self * other
 
-    def __div__(self, other):
+    def __truediv__(self, other):
         return self * (1 / other)
+
+    def __pow__(self, other):
+        return self.binop('**', other)
 
     def get(self):
         raise NotImplementedError

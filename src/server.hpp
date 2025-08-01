@@ -41,6 +41,13 @@ public:
         //CcsSendReply(1, &res);
     }
 
+    static void rescale_handler(char* msg)
+    {
+        char* cmd = msg + CmiMsgHeaderSizeBytes;
+        //int new_size = extract<int>(cmd);
+        stencil.rescale();
+    }
+
     static void fetch_handler(char* msg)
     {
         char* cmd = msg + CmiMsgHeaderSizeBytes;

@@ -8,6 +8,8 @@ module stencil
     {
         entry Stencil(int, int);
 
+        entry void rescale();
+
         entry void gather(int name);
             
         entry void receive_dag(int size, char cmd[size]);

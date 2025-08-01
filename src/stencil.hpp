@@ -145,6 +145,10 @@ public:
 
     ~Stencil();
 
+    void ResumeFromSync();
+
+    void rescale();
+
     void pup(PUP::er &p);
 
     void mark_done(DAGNode* node);

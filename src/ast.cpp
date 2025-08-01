@@ -172,6 +172,13 @@ std::string OperationNode::generate_code(Context* ctx)
             std::string opstr = get_op_string(operation);
             return fmt::format("({} {} {})", operands[0]->generate_code(ctx), opstr, operands[1]->generate_code(ctx));
         }
+
+        case Operation::pow:
+        {
+            std::string base = operands[0]->generate_code(ctx);
+            std::string exponent = operands[1]->generate_code(ctx);
+            return fmt::format("(pow({}, {}))", base, exponent);
+        }
         
         case Operation::getitem:
         {
@@ -340,6 +347,9 @@ void Kernel::get_launch_params(std::vector<Slice*> &bounds, int* threads_per_blo
     }
 
     choose_optimal_grid(threads_per_block, global_ntx, global_nty);
+
+    //CkPrintf("PE %i> Launch params: threads_per_block = (%i, %i), grid_dims = (%i, %i)\n",
+    //        CkMyPe(), threads_per_block[0], threads_per_block[1], grid_dims[0], grid_dims[1]);
 
     grid_dims[0] = (global_ntx + threads_per_block[0] - 1) / threads_per_block[0];
     grid_dims[1] = (global_nty + threads_per_block[1] - 1) / threads_per_block[1];
@@ -561,6 +571,7 @@ ASTNode* build_ast(char* &cmd)
         case Operation::add:
         case Operation::sub:
         case Operation::mul:
+        case Operation::pow:
         case Operation::setitem:
         {
             OperationNode* op_node = new OperationNode();

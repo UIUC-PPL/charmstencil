@@ -41,7 +41,7 @@ enum class Operation : uint8_t
     add = 2,
     sub = 3,
     mul = 4,
-    norm = 5,
+    pow = 5,
     getitem = 6,
     setitem = 7,
     exchange_ghosts = 8
