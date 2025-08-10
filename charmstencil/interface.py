@@ -2,6 +2,18 @@ import struct
 import numpy as np
 from pyccs import Server
 
+interface = None
+
+
+def get_interface():
+    global interface
+    return interface
+
+
+def set_interface(new_interface):
+    global interface
+    interface = new_interface
+
 
 def to_bytes(value, dtype='I'):
     return struct.pack(dtype, value)

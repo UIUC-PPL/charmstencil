@@ -1,6 +1,7 @@
 from charmstencil.kernel import get_active_kernel_graph, get_kernel_graph_set, reset_active_kernel_graph
-from charmstencil.dag import get_active_dag, ArrayDAGNode
+from charmstencil.dag import get_active_dag, get_max_depth, ArrayDAGNode
 from charmstencil.ast import KernelGraph, KernelParameter, ParamOperationNode, get_parameter_state
+from charmstencil.interface import get_interface, set_interface
 
 next_name = 0
 
@@ -88,6 +89,10 @@ class Array(object):
         get_active_dag().add_kernel_call(active_graph, get_parameter_state().arrays, output_shape=key)
         get_parameter_state().reset()
         reset_active_kernel_graph()
+
+        # check DAG size
+        if len(get_active_dag().all_nodes) > get_max_depth():
+            get_interface().execute()
 
     def __add__(self, other):
         return self.binop('+', other)

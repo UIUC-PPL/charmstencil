@@ -212,7 +212,8 @@ class ParamOperationNode(object):
         node_map = {}
         self.fill_plot(G, node_map=node_map)
         pos = graphviz_layout(G, prog='dot')
-        nx.draw(G, pos, labels=node_map, node_size=600, font_size=10)
+        colors = [G.nodes[n].get('color', 'skyblue') for n in G.nodes()]
+        nx.draw(G, pos, labels=node_map, node_size=600, font_size=10, node_color=colors)
         plt.show()
 
 
@@ -297,5 +298,8 @@ class KernelGraph(object):
         next_id = 0
         self.fill_plot(G, node_map=node_map, next_id=next_id)
         pos = graphviz_layout(G, prog='dot')
-        nx.draw(G, pos, labels=node_map, node_size=600, font_size=10)
-        plt.show()
+        plt.figure(figsize=(6, 6))
+        colors = [G.nodes[n].get('color', 'skyblue') for n in G.nodes()]
+        nx.draw(G, pos, labels=node_map, node_size=600, font_size=14, node_color=colors)
+        plt.savefig(f"kernel_graph_{self.kernel_id}.pdf", bbox_inches='tight')
+        plt.close()

@@ -86,7 +86,7 @@ void finalize_analysis(Context* ctx)
         if (accesses.size() > 1)
         {
             // If there are multiple accesses, we need to register shared memory access
-            ctx->register_shared_memory_access(argname);
+            //ctx->register_shared_memory_access(argname);
         }
     }
 }

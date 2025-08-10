@@ -4,6 +4,21 @@ import charmstencil.array as array
 
 gid = 0
 fusion_enabled = True
+max_depth = 100
+
+def set_max_depth(depth):
+    global max_depth
+    max_depth = depth
+
+def get_max_depth():
+    """
+    Returns the current maximum depth for the DAG.
+
+    Returns:
+        int: The current maximum depth.
+    """
+    global max_depth
+    return max_depth
 
 def is_fusion_enabled():
     """
@@ -104,7 +119,11 @@ class DAGNode(object):
         """
         #print(self.children)
         if not G.has_node(self.gid):
-            G.add_node(self.gid)
+            #print(self.node_type, self.gid, self.name)
+            if self.node_type == DAGNodeType.Array:
+                G.add_node(self.gid, color='lightcoral')
+            else:
+                G.add_node(self.gid, color='skyblue')
             node_map[self.gid] = self.name
 
         if parent is not None:
@@ -441,8 +460,12 @@ class DAG(object):
             node.fill_plot(G, node_map=node_map, parent=None)
 
         pos = graphviz_layout(G, prog='dot')
-        nx.draw(G, pos, labels=node_map, node_size=600, font_size=10)
-        plt.show()
+        colors = [G.nodes[n].get('color', 'grey') for n in G.nodes()]
+        plt.figure(figsize=(4.2, 9))
+        nx.draw(G, pos, labels=node_map, node_size=600, font_size=14, node_color=colors)
+        #plt.show()
+        plt.savefig('dag.pdf', bbox_inches='tight')
+        plt.close()
 
 
 active_dag = DAG()

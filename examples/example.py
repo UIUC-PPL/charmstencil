@@ -29,7 +29,7 @@ for i in range(10):
 
 #interface.execute()
 show_dag()
-#plot_kernel_graphs()
+plot_kernel_graphs()
 #get_active_dag().clear()
 
 #for i in range(100):

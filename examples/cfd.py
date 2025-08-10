@@ -1,7 +1,7 @@
 from charmstencil.kernel import plot_kernel_graphs
 from charmstencil.array import create_array
 from charmstencil.dag import show_dag, disable_fusion, get_active_dag
-from charmstencil.interface import CCSInterface
+from charmstencil.interface import CCSInterface, set_interface
 import numpy as np
 import sys
 
@@ -102,9 +102,9 @@ dt = .001
 nt = 1000
 nit = 30
 
-interface = CCSInterface('192.168.1.114', 1234, odf=1)
+interface = CCSInterface('192.168.1.114', 1234, odf=4)
 
-u, v, p = cavity_flow(50, u1, v1, u2, v2, dt, dx, dy, p1, p2, rho, nu, b)
+u, v, p = cavity_flow(10, u1, v1, u2, v2, dt, dx, dy, p1, p2, rho, nu, b)
 
 interface.execute()
 #show_dag()
