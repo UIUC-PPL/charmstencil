@@ -25,7 +25,7 @@ module stencil
     {
         entry CodeGenCache();
 
-        entry void receive(int size, char msg[size], CProxy_Stencil stencil_proxy);
+        entry void receive(int epoch, int size, char msg[size], CProxy_Stencil stencil_proxy);
 
         entry [reductiontarget] void send_dag(int done);
 

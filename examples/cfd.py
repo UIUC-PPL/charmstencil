@@ -1,9 +1,10 @@
 from charmstencil.kernel import plot_kernel_graphs
 from charmstencil.array import create_array
-from charmstencil.dag import show_dag, disable_fusion, get_active_dag
+from charmstencil.dag import show_dag, disable_fusion, get_active_dag, set_max_depth
 from charmstencil.interface import CCSInterface, set_interface
 import numpy as np
 import sys
+import time
 
 #disable_fusion()
 
@@ -78,6 +79,8 @@ def cavity_flow(nt, u, v, un, vn, dt, dx, dy, p, pn, rho, nu, b):
 
     return u, v, p
 
+set_max_depth(200)
+
 n = int(sys.argv[1])
 
 u1 = create_array((n, n))
@@ -103,16 +106,19 @@ nt = 1000
 nit = 30
 
 interface = CCSInterface('192.168.1.114', 1234, odf=4)
+set_interface(interface)
 
-u, v, p = cavity_flow(10, u1, v1, u2, v2, dt, dx, dy, p1, p2, rho, nu, b)
+u, v, p = cavity_flow(1, u1, v1, u2, v2, dt, dx, dy, p1, p2, rho, nu, b)
 
-interface.execute()
+interface.sync()
 #show_dag()
 #get_active_dag().clear()
 
-#u, v, p = cavity_flow(nt, u1, v1, u2, v2, dt, dx, dy, p1, p2, rho, nu, b)
+start = time.time()
+u, v, p = cavity_flow(30, u1, v1, u2, v2, dt, dx, dy, p1, p2, rho, nu, b)
+interface.sync()
 
-#interface.execute()
+print(f"Execution took {time.time() - start} seconds")
 
 #show_dag()
 #plot_kernel_graphs()

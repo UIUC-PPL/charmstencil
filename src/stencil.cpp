@@ -4,6 +4,7 @@
 CProxy_CodeGenCache codegen_proxy;
 
 CodeGenCache::CodeGenCache()
+    : EPOCH(0)
 {
     lock = CmiCreateLock();
 }
@@ -27,6 +28,7 @@ void CodeGenCache::pup(PUP::er &p)
 {
     p | start_time;
     p | stencil_proxy;
+    p | EPOCH;
     int size;
     if (p.isUnpacking())
     {
@@ -70,8 +72,34 @@ void CodeGenCache::pup(PUP::er &p)
     }
 }
 
-void CodeGenCache::receive(int size, char *cmd, CProxy_Stencil stencil_proxy_)
+void CodeGenCache::receive(int epoch, int size, char *cmd, CProxy_Stencil stencil_proxy_)
 {
+    if (epoch > EPOCH)
+    {
+        char* msg_copy = nullptr;
+        if (size > 0)
+        {
+            msg_copy = (char*)malloc(size);
+            memcpy(msg_copy, cmd, size);
+        }
+        buffered_msgs[epoch] = std::make_pair(size, msg_copy);
+        return;
+    }
+
+    if (size == 0)
+    {
+        if (thisIndex == 0)
+        {
+            CkPrintf("Sync operation called %i\n", epoch);
+            // this is a sync message
+            char status = '\0';
+            CcsSendDelayedReply(operation_reply, sizeof(char), &status);
+        }
+        EPOCH++;
+        check_buffered_msgs();
+        return;
+    }
+
     start_time = CmiWallTimer();
     int num_kernels = extract<int>(cmd);
     CkPrintf("Received %i kernels\n", num_kernels);
@@ -100,12 +128,29 @@ void CodeGenCache::send_dag(int done)
     delete[] saved_dag;
 }
 
+void CodeGenCache::check_buffered_msgs()
+{
+    auto it = buffered_msgs.find(EPOCH);
+    if (it != buffered_msgs.end())
+    {
+        // Process buffered message
+        int size = it->second.first;
+        char* cmd = it->second.second;
+        receive(EPOCH, size, cmd, stencil_proxy);
+        buffered_msgs.erase(it);
+        free(cmd);
+    }
+}
+
 void CodeGenCache::operation_done(double start)
 {
     double runtime = CmiWallTimer() - start;
-    CkPrintf("Execution took %f seconds\n", runtime);
-    CcsSendDelayedReply(operation_reply, sizeof(double), &runtime);
+    if (thisIndex == 0)
+        CkPrintf("Execution took %f seconds\n", runtime);
+    //CcsSendDelayedReply(operation_reply, sizeof(double), &runtime);
     // CkExit();
+    EPOCH++;
+    check_buffered_msgs();
 }
 
 void CodeGenCache::gather(int name, int index_x, int index_y, int local_dim, int num_chares, int data_size, float *data)
@@ -337,7 +382,7 @@ void Stencil::receive_dag(int size, char *graph)
         DEBUG_PRINT("PE %i> No goals waiting\n", CkMyPe());
         cudaStreamSynchronize(compute_stream);
         cudaStreamSynchronize(comm_stream);
-        CkCallback cb(CkReductionTarget(CodeGenCache, operation_done), codegen_proxy[0]);
+        CkCallback cb(CkReductionTarget(CodeGenCache, operation_done), codegen_proxy);
         contribute(sizeof(double), (void *)&start_time, CkReduction::min_double, cb);
     }
 }

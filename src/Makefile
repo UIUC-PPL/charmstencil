@@ -1,4 +1,4 @@
-CHARMDIR=/home/aditya/charm/
+CHARMDIR=/home/aditya/charm-gpu/
 CHARMC=$(CHARMDIR)/bin/charmc
 CHARM_INC=-I$(CHARMDIR)/include
 NVCC=nvcc

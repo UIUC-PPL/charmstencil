@@ -80,6 +80,7 @@ class CCSInterface(Interface):
         self.server.connect()
         cmd = to_bytes(odf, 'i')
         self.kernels_sent = {}
+        self.epoch = 0
         self.send_command(Handlers.connection_handler, cmd)
         print("Connected to server")
 
@@ -98,6 +99,13 @@ class CCSInterface(Interface):
                 kernels_to_send[kernel_graph.kernel_id] = kernel_graph
         return kernels_to_send
 
+    def sync(self):
+        self.execute()
+        cmd = to_bytes(0, 'i')
+        cmd += to_bytes(self.epoch, 'i')
+        self.send_command(Handlers.operation_handler, cmd)
+        self.epoch += 1
+
     def execute(self):
         """
         Send the DAG and kernel graphs to backend for execution.
@@ -115,11 +123,12 @@ class CCSInterface(Interface):
         dag_msg = to_bytes(len(dag), 'i')
         dag_msg += dag
         msg = to_bytes(len(cmd) + len(dag_msg), 'i')
+        msg += to_bytes(self.epoch, 'i')
         msg += cmd
         msg += dag_msg
-        self.send_command(Handlers.operation_handler, msg)
+        self.send_command_async(Handlers.operation_handler, msg)
         get_active_dag().clear()
-        #get_kernel_graphs().clear()
+        self.epoch += 1
 
     def disconnect(self):
         self.send_command(Handlers.disconnection_handler, '')

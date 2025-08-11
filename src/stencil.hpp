@@ -74,9 +74,11 @@ public:
 class CodeGenCache : public CBase_CodeGenCache
 {
 private:
+    int EPOCH;
     double start_time;
     CmiNodeLock lock;
     std::unordered_map<size_t, compute_fun_t> cache;
+    std::unordered_map<int, std::pair<int, char*>> buffered_msgs;
 
     std::unordered_map<int, std::pair<int, float*>> gathered_arrays;
     //std::unordered_map<int, int> gather_recv_count;
@@ -100,11 +102,13 @@ public:
 
     compute_fun_t lookup(size_t hash);
 
-    void receive(int size, char* msg, CProxy_Stencil stencil_proxy);
+    void receive(int epoch, int size, char* msg, CProxy_Stencil stencil_proxy);
 
     void send_dag(int done);
 
     void operation_done(double start);
+
+    void check_buffered_msgs();
 
     void gather(int name, int index_x, int index_y, int local_dim, int num_chares, int data_size, float* data);
 };

@@ -34,10 +34,15 @@ public:
 #endif
         char* cmd = msg + CmiMsgHeaderSizeBytes;
         int size = extract<int>(cmd);
+        int epoch = extract<int>(cmd);
         //char* msg_cpy = (char*) malloc(size);
-        operation_reply = CcsDelayReply();
+        if (size == 0)
+        {
+            CkPrintf("Sync operation received %i\n", epoch);
+            operation_reply = CcsDelayReply();
+        }
         //memcpy(msg_cpy, cmd, size);
-        codegen_proxy.receive(size, cmd, stencil);
+        codegen_proxy.receive(epoch, size, cmd, stencil);
         //CcsSendReply(1, &res);
     }
 

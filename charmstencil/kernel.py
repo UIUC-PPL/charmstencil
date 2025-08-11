@@ -14,7 +14,7 @@ class KernelGraphSet(object):
             graph.kernel_id = get_next_kernel_id()
             self.graphs[graph.kernel_id] = graph
         else:
-            graph.kernel_id = self.identifiers[graph.identifier].kernel_id        
+            graph.kernel_id = self.identifiers[graph.identifier].kernel_id
         
     def get_graph(self, knl_id):
         if knl_id not in self.graphs:
