@@ -110,6 +110,8 @@ public:
 
     void check_buffered_msgs();
 
+    void next_epoch();
+
     void gather(int name, int index_x, int index_y, int local_dim, int num_chares, int data_size, float* data);
 };
 

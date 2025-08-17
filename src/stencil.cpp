@@ -130,6 +130,7 @@ void CodeGenCache::send_dag(int done)
 
 void CodeGenCache::check_buffered_msgs()
 {
+    //CkPrintf("PE%d> Checking buffered messages for epoch %i\n", thisIndex, EPOCH);
     auto it = buffered_msgs.find(EPOCH);
     if (it != buffered_msgs.end())
     {
@@ -144,11 +145,16 @@ void CodeGenCache::check_buffered_msgs()
 
 void CodeGenCache::operation_done(double start)
 {
+    //CkPrintf("PE%d> Operation done for epoch %i\n", thisIndex, EPOCH);
     double runtime = CmiWallTimer() - start;
     if (thisIndex == 0)
         CkPrintf("Execution took %f seconds\n", runtime);
-    //CcsSendDelayedReply(operation_reply, sizeof(double), &runtime);
-    // CkExit();
+    thisProxy.next_epoch();
+}
+
+void CodeGenCache::next_epoch()
+{
+    //CkPrintf("PE%d> Moving to next epoch %i\n", thisIndex, EPOCH + 1);
     EPOCH++;
     check_buffered_msgs();
 }
@@ -382,7 +388,8 @@ void Stencil::receive_dag(int size, char *graph)
         DEBUG_PRINT("PE %i> No goals waiting\n", CkMyPe());
         cudaStreamSynchronize(compute_stream);
         cudaStreamSynchronize(comm_stream);
-        CkCallback cb(CkReductionTarget(CodeGenCache, operation_done), codegen_proxy);
+        CkCallback cb(CkReductionTarget(CodeGenCache, operation_done), codegen_proxy[0]);
+        //CkCallback cb(CkIndex_CodeGenCache::operation_done(0), codegen_proxy);
         contribute(sizeof(double), (void *)&start_time, CkReduction::min_double, cb);
     }
 }

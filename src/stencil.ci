@@ -31,6 +31,8 @@ module stencil
 
         entry [reductiontarget] void operation_done(double start);
 
+        entry [reductiontarget] void next_epoch();
+
         entry void gather(int name, int index_x, int index_y, int local_dim, int num_chares, int data_size, float data[data_size]);
     };
 }
