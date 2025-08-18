@@ -235,6 +235,8 @@ std::string OperationNode::generate_code(Context* ctx)
 
 void Kernel::pup(PUP::er &p)
 {
+    if (p.isUnpacking())
+        context = new Context();
     context->pup(p);
     p | kernel_id;
     p | num_args;
