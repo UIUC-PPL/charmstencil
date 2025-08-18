@@ -49,8 +49,17 @@ public:
     static void rescale_handler(char* msg)
     {
         char* cmd = msg + CmiMsgHeaderSizeBytes;
-        //int new_size = extract<int>(cmd);
-        stencil.rescale();
+        int new_size = extract<int>(cmd);
+        char* bitmap = (char*) malloc(CkNumPes() + sizeof(int));
+        for (int i = 0; i < CkNumPes(); i++)
+            bitmap[i] = 1;
+
+        for (int i = 0; i < CkNumPes(); i++)
+            if (i >= new_size)
+                bitmap[i] = 0;
+        memcpy(bitmap + CkNumPes(), &new_size, sizeof(int));
+        rescale(bitmap);
+        stencil.rescale_backend();
     }
 
     static void fetch_handler(char* msg)

@@ -123,6 +123,7 @@ private:
     int num_nbrs;
     bool boundary[4];
     char* DAG_DONE;
+    int last_done_node;
 
     std::unordered_map<int, int> ghost_info;
     std::unordered_map<int, DAGNode*> node_cache;
@@ -153,7 +154,7 @@ public:
 
     void ResumeFromSync();
 
-    void rescale();
+    void rescale_backend();
 
     void pup(PUP::er &p);
 

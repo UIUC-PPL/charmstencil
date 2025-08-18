@@ -215,6 +215,7 @@ void CodeGenCache::gather(int name, int index_x, int index_y, int local_dim, int
 
 Stencil::Stencil(int num_chares_x, int num_chares_y)
     : num_nbrs(0)
+    , last_done_node(-1)
 {
     usesAtSync = true;
     index[0] = thisIndex.x;
@@ -300,6 +301,7 @@ void Stencil::pup(PUP::er &p)
     p | num_chares[1];
     p | index[0];
     p | index[1];
+    p | last_done_node;
     p | num_nbrs;
     p | ghost_info;
     for (int i = 0; i < 4; i++)
@@ -339,7 +341,7 @@ void Stencil::pup(PUP::er &p)
     }
 }
 
-void Stencil::rescale()
+void Stencil::rescale_backend()
 {
     AtSync();
 }
@@ -364,7 +366,10 @@ void Stencil::gather(int name)
 void Stencil::receive_dag(int size, char *graph)
 {
     start_time = CmiWallTimer();
-    std::vector<DAGNode *> goals = build_dag(graph, node_cache, codegen_proxy.ckLocalBranch()->kernels, ghost_info);
+    std::vector<DAGNode *> goals = build_dag(graph, node_cache, codegen_proxy.ckLocalBranch()->kernels, 
+        ghost_info, last_done_node);
+    for (auto &goal : goals)
+        last_done_node = std::max(last_done_node, goal->node_id);
     // DEBUG_PRINT("PE %i> Num goals = %i\n", CkMyPe(), goals.size());
     if (thisIndex.x == 0 && thisIndex.y == 0)
         CkPrintf("Building DAG took %f seconds\n", CmiWallTimer() - start_time);
@@ -453,7 +458,7 @@ bool Stencil::traverse_dag(DAGNode *node)
     // DEBUG_PRINT("Traversing kernel node %i\n", kernel_node->kernel_id);
 
     bool dep_done = true;
-    // DEBUG_PRINT("PE %i> Kernel node %i; dependencies = %i\n", CkMyPe(), kernel_node->node_id, kernel_node->dependencies.size());
+    DEBUG_PRINT("PE %i> Kernel node %i; dependencies = %i\n", CkMyPe(), kernel_node->node_id, kernel_node->dependencies.size());
     for (auto &dep : kernel_node->dependencies)
     {
         // traverse the dependencies

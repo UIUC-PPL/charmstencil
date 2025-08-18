@@ -8,7 +8,8 @@ DAGNode::DAGNode()
 }
 
 std::vector<DAGNode*> build_dag(char* &cmd, std::unordered_map<int, DAGNode*>& node_cache,
-    std::unordered_map<int, Kernel*> &kernels, std::unordered_map<int, int> &ghost_info)
+    std::unordered_map<int, Kernel*> &kernels, std::unordered_map<int, int> &ghost_info,
+    int last_done_node)
 {
     // this is done in 2 steps
     // first build the node cache
@@ -58,9 +59,11 @@ std::vector<DAGNode*> build_dag(char* &cmd, std::unordered_map<int, DAGNode*>& n
     {
         int src = extract<int>(cmd);
         int dst = extract<int>(cmd);
+        if (src <= last_done_node)
+            continue;
         if (node_cache[src] == nullptr)
         {
-            DEBUG_PRINT("src %i, dst %i\n", src, dst);
+            DEBUG_PRINT("ERROR! src %i, dst %i\n", src, dst);
         }
         static_cast<KernelDAGNode*>(node_cache[dst])->dependencies.push_back(node_cache[src]);
     }

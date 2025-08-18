@@ -74,15 +74,15 @@ public:
                 hapiCheck(hapiMalloc((void**)&recv_ghost_buffers[i], sizeof(float) * ghost_size));
             }
 
-            //p(&(send_ghost_buffers[i]), ghost_size, PUP::PUPMode::DEVICE);
-            //p(&(recv_ghost_buffers[i]), ghost_size, PUP::PUPMode::DEVICE);
+            //p(send_ghost_buffers[i], ghost_size, PUP::PUPMode::DEVICE);
+            //p(recv_ghost_buffers[i], ghost_size, PUP::PUPMode::DEVICE);
         }
 
         if (p.isUnpacking())
         {
             hapiCheck(hapiMalloc((void**)&data, sizeof(float) * total_size));
         }
-        //p(&data, total_size, PUP::PUPMode::DEVICE);
+        p(data, total_size, PUP::PUPMode::DEVICE);
     }
 
     void allocate_ghost_buffers(bool* boundary)

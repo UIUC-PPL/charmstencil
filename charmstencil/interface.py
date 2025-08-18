@@ -27,6 +27,7 @@ class Handlers(object):
     connection_handler = b'connect'
     disconnection_handler = b'disconnect'
     operation_handler = b'operation'
+    rescale_handler = b'rescale'
     fetch_handler = b'fetch'
 
 
@@ -98,6 +99,11 @@ class CCSInterface(Interface):
             if kernel_graph.kernel_id not in self.kernels_sent:
                 kernels_to_send[kernel_graph.kernel_id] = kernel_graph
         return kernels_to_send
+
+    def rescale(self, new_nodes):
+        self.sync()
+        cmd = to_bytes(new_nodes, 'i')
+        self.send_command_async(Handlers.rescale_handler, cmd)
 
     def sync(self):
         self.execute()

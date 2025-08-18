@@ -8,7 +8,7 @@ module stencil
     {
         entry Stencil(int, int);
 
-        entry void rescale();
+        entry void rescale_backend();
 
         entry void gather(int name);
             

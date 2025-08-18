@@ -21,6 +21,7 @@ public:
         CcsRegisterHandler("connect", (CmiHandler) Server::connection_handler);
         CcsRegisterHandler("disconnect", (CmiHandler) Server::disconnection_handler);
         CcsRegisterHandler("operation", (CmiHandler) Server::operation_handler);
+        CcsRegisterHandler("rescale", (CmiHandler) Server::rescale_handler);
         CcsRegisterHandler("fetch", (CmiHandler) Server::fetch_handler);
     }
 
