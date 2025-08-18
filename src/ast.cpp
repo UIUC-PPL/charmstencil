@@ -13,7 +13,27 @@ void Context::set_active(int name)
 
 void Context::pup(PUP::er &p)
 {
-    p | shmem_info;
+    if (p.isUnpacking())
+    {
+        shmem_info.clear();
+        int num_entries;
+        p | num_entries;
+        for (int i = 0; i < num_entries; i++)
+        {
+            int argname;
+            p | argname;
+            shmem_info.insert(argname);
+        }
+    }
+    else
+    {
+        int num_entries = shmem_info.size();
+        p | num_entries;
+        for (const auto& argname : shmem_info)
+        {
+            p | argname;
+        }
+    }
 }
 
 int Context::get_active()
