@@ -100,7 +100,7 @@ void CodeGenCache::receive(int epoch, int size, char *cmd, CProxy_Stencil stenci
         return;
     }
 
-    start_time = CmiWallTimer();
+    //start_time = CmiWallTimer();
     int num_kernels = extract<int>(cmd);
     CkPrintf("Received %i kernels\n", num_kernels);
     for (int i = 0; i < num_kernels; i++)
