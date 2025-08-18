@@ -50,15 +50,20 @@ public:
     {
         char* cmd = msg + CmiMsgHeaderSizeBytes;
         int new_size = extract<int>(cmd);
-        char* bitmap = (char*) malloc(CkNumPes() + sizeof(int));
+        char* bitmap = (char*) malloc(CkNumPes() + 2 * sizeof(int));
+        char* orig = bitmap;
+        memcpy(bitmap, &new_size, sizeof(int));
+        bitmap += sizeof(int);
+        int curr_size = CkNumPes();
+        memcpy(bitmap, &curr_size, sizeof(int));
+        bitmap += sizeof(int);
         for (int i = 0; i < CkNumPes(); i++)
             bitmap[i] = 1;
 
         for (int i = 0; i < CkNumPes(); i++)
             if (i >= new_size)
                 bitmap[i] = 0;
-        memcpy(bitmap + CkNumPes(), &new_size, sizeof(int));
-        rescale(bitmap);
+        rescale(orig);
         stencil.rescale_backend();
     }
 
