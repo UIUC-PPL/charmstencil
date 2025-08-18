@@ -218,6 +218,8 @@ Stencil::Stencil(int num_chares_x, int num_chares_y)
     , last_done_node(-1)
 {
     usesAtSync = true;
+    start_time = CmiWallTimer();
+    num_nodes = 0;
     index[0] = thisIndex.x;
     index[1] = thisIndex.y;
 
@@ -304,6 +306,8 @@ void Stencil::pup(PUP::er &p)
     p | last_done_node;
     p | num_nbrs;
     p | ghost_info;
+    p | start_time;
+    p | num_nodes;
     for (int i = 0; i < 4; i++)
         p | boundary[i];
     p | ghost_counts;
@@ -799,6 +803,10 @@ void Stencil::execute_kernel(KernelDAGNode *node)
     }
 
     mark_done(node);
+
+    num_nodes++;
+    if(num_nodes % 10 == 0 && thisIndex.x == 0 && thisIndex.y == 0)
+        DEBUG_PRINT("PE %i> Processed %i nodes in: %f seconds\n", CkMyPe(), num_nodes, CmiWallTimer() - start_time);
 
     for (auto &bound : bounds)
         delete bound;

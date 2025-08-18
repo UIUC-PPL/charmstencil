@@ -120,6 +120,7 @@ class Stencil : public CBase_Stencil
 {
 private:
     double start_time;
+    int num_nodes;
     int num_nbrs;
     bool boundary[4];
     char* DAG_DONE;
