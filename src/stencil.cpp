@@ -369,7 +369,7 @@ void Stencil::gather(int name)
 
 void Stencil::receive_dag(int size, char *graph)
 {
-    start_time = CmiWallTimer();
+    //start_time = CmiWallTimer();
     std::vector<DAGNode *> goals = build_dag(graph, node_cache, codegen_proxy.ckLocalBranch()->kernels, 
         ghost_info, last_done_node);
     for (auto &goal : goals)
@@ -377,7 +377,7 @@ void Stencil::receive_dag(int size, char *graph)
     // DEBUG_PRINT("PE %i> Num goals = %i\n", CkMyPe(), goals.size());
     if (thisIndex.x == 0 && thisIndex.y == 0)
         CkPrintf("Building DAG took %f seconds\n", CmiWallTimer() - start_time);
-    start_time = CmiWallTimer();
+    //start_time = CmiWallTimer();
     for (auto &goal : goals)
     {
         bool is_done = traverse_dag(goal);
