@@ -3,6 +3,7 @@
 #include <queue>
 #include <unordered_map>
 #include "stencil.hpp"
+#include "manager.h"
 
 
 CProxy_Stencil stencil;
