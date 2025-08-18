@@ -806,7 +806,7 @@ void Stencil::execute_kernel(KernelDAGNode *node)
 
     num_nodes++;
     if(num_nodes % 10 == 0 && thisIndex.x == 0 && thisIndex.y == 0)
-        DEBUG_PRINT("PE %i> Processed %i nodes in: %f seconds\n", CkMyPe(), num_nodes, CmiWallTimer() - start_time);
+        CkPrintf("PE %i> Processed %i nodes in: %f seconds\n", CkMyPe(), num_nodes, CmiWallTimer() - start_time);
 
     for (auto &bound : bounds)
         delete bound;
