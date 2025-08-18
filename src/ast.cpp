@@ -29,7 +29,7 @@ void Context::pup(PUP::er &p)
     {
         int num_entries = shmem_info.size();
         p | num_entries;
-        for (const auto& argname : shmem_info)
+        for (int argname : shmem_info)
         {
             p | argname;
         }
