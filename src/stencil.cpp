@@ -26,7 +26,6 @@ compute_fun_t CodeGenCache::lookup(size_t hash)
 
 void CodeGenCache::pup(PUP::er &p)
 {
-    p | start_time;
     p | stencil_proxy;
     p | EPOCH;
     int size;
@@ -218,7 +217,7 @@ Stencil::Stencil(int num_chares_x, int num_chares_y)
     , last_done_node(-1)
 {
     usesAtSync = true;
-    start_time = time(nullptr);
+    start_time = CmiWallTimer();
     num_nodes = 0;
     index[0] = thisIndex.x;
     index[1] = thisIndex.y;
@@ -265,6 +264,7 @@ Stencil::Stencil(int num_chares_x, int num_chares_y)
 
 Stencil::Stencil(CkMigrateMessage *m) 
 {
+    start_time = CmiWallTimer();
     CUdevice cuDevice;
     CUcontext cuContext;
     hapiCheck(cudaFree(0));
@@ -306,7 +306,6 @@ void Stencil::pup(PUP::er &p)
     p | last_done_node;
     p | num_nbrs;
     p | ghost_info;
-    p | start_time;
     p | num_nodes;
     for (int i = 0; i < 4; i++)
         p | boundary[i];
@@ -806,7 +805,7 @@ void Stencil::execute_kernel(KernelDAGNode *node)
 
     num_nodes++;
     if(num_nodes % 10 == 0 && thisIndex.x == 0 && thisIndex.y == 0)
-        CkPrintf("PE %i> Processed %i nodes in: %f seconds\n", CkMyPe(), num_nodes, difftime(time(nullptr), start_time));
+        CkPrintf("PE %i> Processed %i nodes in: %f seconds\n", CkMyPe(), num_nodes, CmiWallTimer() - start_time);
 
     for (auto &bound : bounds)
         delete bound;

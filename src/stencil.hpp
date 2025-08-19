@@ -119,7 +119,7 @@ public:
 class Stencil : public CBase_Stencil
 {
 private:
-    time_t start_time;
+    double start_time;
     int num_nodes;
     int num_nbrs;
     bool boundary[4];
