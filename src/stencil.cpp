@@ -218,7 +218,7 @@ Stencil::Stencil(int num_chares_x, int num_chares_y)
     , last_done_node(-1)
 {
     usesAtSync = true;
-    start_time = CmiWallTimer();
+    start_time = time(nullptr);
     num_nodes = 0;
     index[0] = thisIndex.x;
     index[1] = thisIndex.y;
@@ -806,7 +806,7 @@ void Stencil::execute_kernel(KernelDAGNode *node)
 
     num_nodes++;
     if(num_nodes % 10 == 0 && thisIndex.x == 0 && thisIndex.y == 0)
-        CkPrintf("PE %i> Processed %i nodes in: %f seconds\n", CkMyPe(), num_nodes, CmiWallTimer() - start_time);
+        CkPrintf("PE %i> Processed %i nodes in: %f seconds\n", CkMyPe(), num_nodes, difftime(time(nullptr), start_time));
 
     for (auto &bound : bounds)
         delete bound;
