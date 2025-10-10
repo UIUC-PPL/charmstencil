@@ -119,9 +119,12 @@ private:
     std::unordered_map<int, DAGNode*> node_cache;
     std::unordered_set<int> goals_waiting;
 
-    std::unordered_map<int, int> ghost_counts;
-    std::unordered_map<int, int> ghosts_expected;
-    std::unordered_map<int, std::vector<int>> ghost_arrays;
+    std::unordered_map<int, int> ghost_counts_x;
+    std::unordered_map<int, int> ghosts_expected_x;
+    std::unordered_map<int, std::vector<int>> ghost_arrays_x;
+    std::unordered_map<int, int> ghost_counts_y;
+    std::unordered_map<int, int> ghosts_expected_y;
+    std::unordered_map<int, std::vector<int>> ghost_arrays_y;
 public:    
     // expects that the number of dimensions and length in each 
     // dimension will be specified at the time of creation

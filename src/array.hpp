@@ -47,6 +47,10 @@ public:
         ghost_size.resize(shape.size());
         ghost_size[0] = ghost_depth * local_shape[0]; // FIXME assuming square array
         ghost_size[1] = ghost_depth * local_shape[1];
+        for(int i=0; i<4; i++){
+            send_ghost_buffers[i] = nullptr;
+            recv_ghost_buffers[i] = nullptr;
+        }
         allocate_ghost_buffers(boundary);
     }
 

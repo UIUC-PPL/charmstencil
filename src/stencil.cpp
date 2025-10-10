@@ -430,34 +430,70 @@ void Stencil::receive_ghost_data(int node_id, int name, int dir, int size, int d
 
     // cudaStreamSynchronize(comm_stream);
 
-    auto it = ghost_counts.find(node_id);
-    if (it == ghost_counts.end())
-    {
-        ghost_counts[node_id] = 1;
+    if(dimension == 0){
+        auto it = ghost_counts_x.find(node_id);
+        if (it == ghost_counts_x.end())
+        {
+            ghost_counts_x[node_id] = 1;
+        }
+        else
+        {
+            it->second++;
+            check_ghost_completion(node_id,dimension);
+        }
     }
-    else
-    {
-        it->second++;
-        check_ghost_completion(node_id,dimension);
+
+    else if (dimension == 1){
+        auto it = ghost_counts_y.find(node_id);
+        if (it == ghost_counts_y.end())
+        {
+            ghost_counts_y[node_id] = 1;
+        }
+        else
+        {
+            it->second++;
+            check_ghost_completion(node_id,dimension);
+        }
     }
+
 }
 
 void Stencil::check_ghost_completion(int node_id, int dimension)
 {
-    if (ghosts_expected.find(node_id) != ghosts_expected.end())
-    {
-        auto it = ghost_counts.find(node_id);
-        // if (it != ghost_counts.end() && thisIndex.x == 0 && thisIndex.y == 0)
-        //     DEBUG_PRINT("(%i, %i)> Checking ghost completion for node %i, expected = %i, received = %i\n",
-        //         thisIndex.x, thisIndex.y, node_id, ghosts_expected[node_id], it->second);
-        if (ghosts_expected[node_id] == 0 || (it != ghost_counts.end() && it->second == ghosts_expected[node_id]))
+    if (dimension == 0){
+        if (ghosts_expected_x.find(node_id) != ghosts_expected_x.end())
         {
-            // all ghosts received
-            ghosts_expected.erase(node_id);
-            ghost_counts.erase(node_id);
-            handle_ghost_completion(node_id,dimension);
+            auto it = ghost_counts_x.find(node_id);
+            // if (it != ghost_counts.end() && thisIndex.x == 0 && thisIndex.y == 0)
+            //     DEBUG_PRINT("(%i, %i)> Checking ghost completion for node %i, expected = %i, received = %i\n",
+            //         thisIndex.x, thisIndex.y, node_id, ghosts_expected[node_id], it->second);
+            if (ghosts_expected_x[node_id] == 0 || (it != ghost_counts_x.end() && it->second == ghosts_expected_x[node_id]))
+            {
+                // all ghosts received
+                ghosts_expected_x.erase(node_id);
+                ghost_counts_x.erase(node_id);
+                handle_ghost_completion(node_id,dimension);
+            }
         }
     }
+
+    else if (dimension == 1){
+        if (ghosts_expected_y.find(node_id) != ghosts_expected_y.end())
+        {
+            auto it = ghost_counts_y.find(node_id);
+            // if (it != ghost_counts.end() && thisIndex.x == 0 && thisIndex.y == 0)
+            //     DEBUG_PRINT("(%i, %i)> Checking ghost completion for node %i, expected = %i, received = %i\n",
+            //         thisIndex.x, thisIndex.y, node_id, ghosts_expected[node_id], it->second);
+            if (ghosts_expected_y[node_id] == 0 || (it != ghost_counts_y.end() && it->second == ghosts_expected_y[node_id]))
+            {
+                // all ghosts received
+                ghosts_expected_y.erase(node_id);
+                ghost_counts_y.erase(node_id);
+                handle_ghost_completion(node_id,dimension);
+            }
+        }
+    }
+    
 }
 
 void Stencil::ghost_done(KernelCallbackMsg *msg)
@@ -470,25 +506,37 @@ void Stencil::ghost_done(KernelCallbackMsg *msg)
 void Stencil::handle_ghost_completion(int node_id, int dimension)
 {
     // DEBUG_PRINT("(%i, %i)> Handling ghost completion for node %i\n", thisIndex.x, thisIndex.y, node_id);
-    for (int i = 0; i < ghost_arrays[node_id].size(); i++)
-    {
-        int input = ghost_arrays[node_id][i];
-        Array *array = arrays[input];
-        array->ghost_generation = array->generation;
-        array->exchange_in_progress = false;
-    }
-    ghost_arrays.erase(node_id);
-    // CkCallback* cb = new CkCallback(CkIndex_Stencil::ghost_done(NULL), thisProxy[thisIndex]);
-    // KernelCallbackMsg* msg = new KernelCallbackMsg(node_id);
-    // hapiAddCallback(comm_stream, cb, msg);
-    DAGNode *node = node_cache[node_id];
-    if(dimension == 0)
-    {
+    if(dimension == 0){
+        for (int i = 0; i < ghost_arrays_x[node_id].size(); i++)
+        {
+            int input = ghost_arrays_x[node_id][i];
+            Array *array = arrays[input];
+            // array->ghost_generation = array->generation;
+            array->exchange_in_progress = false;
+        }
+        ghost_arrays_x.erase(node_id);
+        // CkCallback* cb = new CkCallback(CkIndex_Stencil::ghost_done(NULL), thisProxy[thisIndex]);
+        // KernelCallbackMsg* msg = new KernelCallbackMsg(node_id);
+        // hapiAddCallback(comm_stream, cb, msg);
+        DAGNode *node = node_cache[node_id];
         ckout<<"Reached Here 0"<<endl;
         send_ghost_data_y(static_cast<KernelDAGNode *>(node));
+
     }
-    else if(dimension == 1)
-    {
+
+    else if (dimension == 1){
+        for (int i = 0; i < ghost_arrays_y[node_id].size(); i++)
+        {
+            int input = ghost_arrays_y[node_id][i];
+            Array *array = arrays[input];
+            array->ghost_generation = array->generation;
+            array->exchange_in_progress = false;
+        }
+        ghost_arrays_y.erase(node_id);
+        // CkCallback* cb = new CkCallback(CkIndex_Stencil::ghost_done(NULL), thisProxy[thisIndex]);
+        // KernelCallbackMsg* msg = new KernelCallbackMsg(node_id);
+        // hapiAddCallback(comm_stream, cb, msg);
+        DAGNode *node = node_cache[node_id];
         ckout<<"Reached Here 1"<<endl;
         execute_kernel(static_cast<KernelDAGNode *>(node));
     }
@@ -500,7 +548,7 @@ void Stencil::send_ghost_data_x(KernelDAGNode *node)
     hapiCheck(cudaEventRecord(compute_event, compute_stream));
     hapiCheck(cudaStreamWaitEvent(comm_stream, compute_event, 0));
 
-    ghost_arrays[node->node_id] = std::vector<int>();
+    ghost_arrays_x[node->node_id] = std::vector<int>();
     // data transfer required for this node
     for (int i = 0; i < node->inputs.size(); i++)
     {
@@ -515,7 +563,7 @@ void Stencil::send_ghost_data_x(KernelDAGNode *node)
             //  ghost data is stale
             //  send the ghost data to the neighbors
             array->exchange_in_progress = true;
-            ghost_arrays[node->node_id].push_back(input);
+            ghost_arrays_x[node->node_id].push_back(input);
 
             // if (!boundary[NORTH])
             // {
@@ -585,7 +633,7 @@ void Stencil::send_ghost_data_x(KernelDAGNode *node)
 
     // cudaStreamSynchronize(comm_stream);
 
-    ghosts_expected[node->node_id] = num_nbrs_x * ghost_arrays[node->node_id].size();
+    ghosts_expected_x[node->node_id] = num_nbrs_x * ghost_arrays_x[node->node_id].size();
     check_ghost_completion(node->node_id,0);
 }
 
@@ -594,7 +642,7 @@ void Stencil::send_ghost_data_y(KernelDAGNode *node)
     hapiCheck(cudaEventRecord(compute_event, compute_stream));
     hapiCheck(cudaStreamWaitEvent(comm_stream, compute_event, 0));
 
-    ghost_arrays[node->node_id] = std::vector<int>();
+    ghost_arrays_y[node->node_id] = std::vector<int>();
     // data transfer required for this node
     for (int i = 0; i < node->inputs.size(); i++)
     {
@@ -609,7 +657,7 @@ void Stencil::send_ghost_data_y(KernelDAGNode *node)
             //  ghost data is stale
             //  send the ghost data to the neighbors
             array->exchange_in_progress = true;
-            ghost_arrays[node->node_id].push_back(input);
+            ghost_arrays_y[node->node_id].push_back(input);
 
             if (!boundary[NORTH])
             {
@@ -622,7 +670,7 @@ void Stencil::send_ghost_data_y(KernelDAGNode *node)
                                          comm_stream);
                 // send ghost to north chare
                 // if (thisIndex.x == 0 && thisIndex.y == 0)
-                DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, NORTH);
+                DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i, ptr address %p\n", CkMyPe(), input, NORTH, array->send_ghost_buffers[NORTH]);
                 // ckout<<thisIndex.x<<" "<<thisIndex.y<<" Sending "<<array->ghost_size[1]<<" to "<<thisIndex.x<<" "<<thisIndex.y + 1<<endl;
                 thisProxy(thisIndex.x, thisIndex.y + 1).receive_ghost_data(node->node_id, input, SOUTH, array->shape[1] * array->ghost_depth, 1,CkDeviceBuffer(array->send_ghost_buffers[NORTH], comm_stream));
             }
@@ -638,7 +686,7 @@ void Stencil::send_ghost_data_y(KernelDAGNode *node)
                                          comm_stream);
                 // send ghost to south chare
                 // if (thisIndex.x == 0 && thisIndex.y == 0)
-                DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i\n", CkMyPe(), input, SOUTH);
+                DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i, ptr address %p\n", CkMyPe(), input, SOUTH, array->send_ghost_buffers[SOUTH]);
                 // ckout<<thisIndex.x<<" "<<thisIndex.y<<" Sending "<<array->ghost_size[1]<<" to "<<thisIndex.x<<" "<<thisIndex.y - 1<<endl;
                 thisProxy(thisIndex.x, thisIndex.y - 1).receive_ghost_data(node->node_id, input, NORTH, array->shape[1] * array->ghost_depth, 1,CkDeviceBuffer(array->send_ghost_buffers[SOUTH], comm_stream));
             }
@@ -678,8 +726,8 @@ void Stencil::send_ghost_data_y(KernelDAGNode *node)
     }
 
     // cudaStreamSynchronize(comm_stream);
-
-    ghosts_expected[node->node_id] = num_nbrs_y * ghost_arrays[node->node_id].size();
+    ckout<<"Reached end of y messages"<<endl;
+    ghosts_expected_y[node->node_id] = num_nbrs_y * ghost_arrays_y[node->node_id].size();
     check_ghost_completion(node->node_id,1);
 }
 
