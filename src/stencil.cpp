@@ -127,6 +127,9 @@ Stencil::Stencil(int num_chares_x, int num_chares_y)
     num_chares[0] = num_chares_x;
     num_chares[1] = num_chares_y;
 
+    num_nbrs_x = 0;
+    num_nbrs_y = 0;
+
     for (int i = 0; i < 2; i++)
     {
         if (index[i] > 0)
@@ -379,11 +382,11 @@ void Stencil::receive_ghost_data(int node_id, int name, int dir, int size, int d
     case NORTH:
     {
         int startx = 0;
-        int stopx = startx + array->shape[1];
+        int stopx = array->shape[1];
         int starty = array->local_shape[0] + array->ghost_depth;
         int stopy = starty + array->ghost_depth;
         invoke_ns_unpacking_kernel(array->data, array->recv_ghost_buffers[dir], array->ghost_depth,
-                                   startx, stopx, starty, stopy, array->strides[0], array->local_shape[1],
+                                   startx, stopx, starty, stopy, array->strides[0], array->shape[1],
                                    comm_stream);
         break;
     }
@@ -391,11 +394,11 @@ void Stencil::receive_ghost_data(int node_id, int name, int dir, int size, int d
     case SOUTH:
     {
         int startx = 0;
-        int stopx = startx + array->shape[1];
+        int stopx = array->shape[1];
         int starty = 0;
         int stopy = array->ghost_depth;
         invoke_ns_unpacking_kernel(array->data, array->recv_ghost_buffers[dir], array->ghost_depth,
-                                   startx, stopx, starty, stopy, array->strides[0], array->local_shape[1],
+                                   startx, stopx, starty, stopy, array->strides[0], array->shape[1],
                                    comm_stream);
         break;
     }
@@ -662,7 +665,7 @@ void Stencil::send_ghost_data_y(KernelDAGNode *node)
             if (!boundary[NORTH])
             {
                 int startx = 0;
-                int stopx = startx + array->shape[1];
+                int stopx = array->shape[1];
                 int starty = array->local_shape[0];
                 int stopy = starty + array->ghost_depth;
                 invoke_ns_packing_kernel(array->data, array->send_ghost_buffers[NORTH], array->ghost_depth,
@@ -672,13 +675,13 @@ void Stencil::send_ghost_data_y(KernelDAGNode *node)
                 // if (thisIndex.x == 0 && thisIndex.y == 0)
                 DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i, ptr address %p\n", CkMyPe(), input, NORTH, array->send_ghost_buffers[NORTH]);
                 // ckout<<thisIndex.x<<" "<<thisIndex.y<<" Sending "<<array->ghost_size[1]<<" to "<<thisIndex.x<<" "<<thisIndex.y + 1<<endl;
-                thisProxy(thisIndex.x, thisIndex.y + 1).receive_ghost_data(node->node_id, input, SOUTH, array->shape[1] * array->ghost_depth, 1,CkDeviceBuffer(array->send_ghost_buffers[NORTH], comm_stream));
+                thisProxy(thisIndex.x, thisIndex.y + 1).receive_ghost_data(node->node_id, input, SOUTH, array->shape[1], 1,CkDeviceBuffer(array->send_ghost_buffers[NORTH], comm_stream));
             }
 
             if (!boundary[SOUTH])
             {
                 int startx = 0;
-                int stopx = startx + array->shape[1];
+                int stopx = array->shape[1];
                 int starty = array->ghost_depth;
                 int stopy = starty + array->ghost_depth;
                 invoke_ns_packing_kernel(array->data, array->send_ghost_buffers[SOUTH], array->ghost_depth,
@@ -688,7 +691,7 @@ void Stencil::send_ghost_data_y(KernelDAGNode *node)
                 // if (thisIndex.x == 0 && thisIndex.y == 0)
                 DEBUG_PRINT("PE %i> Sending ghost data %i to dir %i, ptr address %p\n", CkMyPe(), input, SOUTH, array->send_ghost_buffers[SOUTH]);
                 // ckout<<thisIndex.x<<" "<<thisIndex.y<<" Sending "<<array->ghost_size[1]<<" to "<<thisIndex.x<<" "<<thisIndex.y - 1<<endl;
-                thisProxy(thisIndex.x, thisIndex.y - 1).receive_ghost_data(node->node_id, input, NORTH, array->shape[1] * array->ghost_depth, 1,CkDeviceBuffer(array->send_ghost_buffers[SOUTH], comm_stream));
+                thisProxy(thisIndex.x, thisIndex.y - 1).receive_ghost_data(node->node_id, input, NORTH, array->shape[1], 1,CkDeviceBuffer(array->send_ghost_buffers[SOUTH], comm_stream));
             }
 
             // if (!boundary[EAST])
@@ -742,6 +745,7 @@ void Stencil::execute_kernel(KernelDAGNode *node)
 {
     // if (thisIndex.x == 0 && thisIndex.y == 0)
     DEBUG_PRINT("(%i, %i)> Executing kernel %i\n", thisIndex.x, thisIndex.y, node->node_id);
+    ckout << "Reached Here after exchanges " << endl;
     hapiCheck(cudaEventRecord(comm_event, comm_stream));
     hapiCheck(cudaStreamWaitEvent(compute_stream, comm_event, 0));
 
